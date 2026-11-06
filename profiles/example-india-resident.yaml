@@ -1,0 +1,28 @@
+# Template for an India-resident investor (e.g. Dad). Copy to profiles/<name>.yaml
+# or run:  python -m dicfo onboard --name dad
+name: Dad
+age: 55
+residency: India
+tax_residency: India
+citizenship: India
+employment: salaried            # salaried | business | retired
+monthly_income: 150000
+base_currency: INR
+spend_currency: INR
+horizon_years: 10
+risk_tolerance: moderate
+emergency_fund_months: 6
+emergency_fund_have_months: 6
+monthly_investable: 50000
+tax:
+  regime: new                   # new | old  (80C/ELSS only help under the old regime)
+  india_slab: 0.30
+holdings:
+  mutual_funds:
+    - {scheme_code: "122639", name: "Parag Parikh Flexi Cap Fund - Direct Growth", value: 500000, sip_monthly: 10000, plan: direct, category: flexi_cap}
+    - {scheme_code: "120716", name: "UTI Nifty 50 Index Fund - Direct Growth", value: 300000, sip_monthly: 10000, plan: direct, category: index_largecap}
+  other:
+    india_equity: 200000        # direct stocks
+    gold: 150000
+    india_fixed_income: 1200000 # EPF + PPF + FDs
+    us_equity: 0

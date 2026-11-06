@@ -1,0 +1,57 @@
+# What the CFO watches. Yahoo Finance symbols unless noted.
+indices:
+  sp500: ^GSPC
+  nasdaq100: ^NDX
+  nifty50: ^NSEI
+  sensex: ^BSESN
+  us_vix: ^VIX
+  india_vix: ^INDIAVIX
+macro_markets:
+  gold_usd: GC=F
+  silver_usd: SI=F
+  brent: BZ=F
+  wti: CL=F
+  usdinr: INR=X
+  dxy: DX-Y.NYB
+  us10y: ^TNX        # quoted as yield x1 (e.g. 4.25)
+  us3m: ^IRX
+  bitcoin: BTC-USD
+# Asset class proxies used for dip / trend signals
+asset_class_proxies:
+  us_equity: ^GSPC
+  india_equity: ^NSEI
+  emerging_equity: EEM
+  gold: GC=F
+  silver: SI=F
+  crypto: BTC-USD
+stocks:
+  us: [GOOGL, MSFT, AMZN, NVDA, META, AAPL, AVGO, TSLA, BRK-B, JPM, V, MA, UNH, LLY, JNJ, PG, KO, PEP,
+       COST, WMT, HD, XOM, CVX, ORCL, AMD, NFLX, CRM, ADBE, TSM, ASML]
+  # Nifty 50 constituents (list changes twice a year; refresh from niftyindices.com)
+  india: [RELIANCE.NS, HDFCBANK.NS, ICICIBANK.NS, INFY.NS, TCS.NS, BHARTIARTL.NS, LT.NS, ITC.NS, SBIN.NS,
+          KOTAKBANK.NS, AXISBANK.NS, HINDUNILVR.NS, BAJFINANCE.NS, M&M.NS, MARUTI.NS, SUNPHARMA.NS, HCLTECH.NS,
+          NTPC.NS, TITAN.NS, ULTRACEMCO.NS, TATAMOTORS.NS, POWERGRID.NS, ASIANPAINT.NS, ONGC.NS, ADANIENT.NS,
+          ADANIPORTS.NS, BAJAJFINSV.NS, BAJAJ-AUTO.NS, NESTLEIND.NS, JSWSTEEL.NS, TATASTEEL.NS, COALINDIA.NS,
+          WIPRO.NS, TECHM.NS, GRASIM.NS, HINDALCO.NS, CIPLA.NS, DRREDDY.NS, SBILIFE.NS, HDFCLIFE.NS, EICHERMOT.NS,
+          BEL.NS, TRENT.NS, APOLLOHOSP.NS, SHRIRAMFIN.NS, INDUSINDBK.NS, HEROMOTOCO.NS, BRITANNIA.NS, TATACONSUM.NS, ETERNAL.NS]
+etfs:
+  # US-listed: no PFIC problem for a US tax resident
+  us_listed: [VOO, VTI, QQQ, VXUS, INDA, EPI, SMIN, EEM, GLD, IAU, SLV]
+  # India-listed: fine for Indian residents, PFIC for US tax residents
+  india_listed: [NIFTYBEES.NS, JUNIORBEES.NS, MID150BEES.NS, GOLDBEES.NS, SILVERBEES.NS, MON100.NS]
+# Indian mutual funds by AMFI scheme code (NAV from api.mfapi.in).
+# Codes can change; search: https://api.mfapi.in/mf/search?q=parag%20parikh
+mutual_funds:
+  "122639": Parag Parikh Flexi Cap - Direct Growth
+  "120716": UTI Nifty 50 Index - Direct Growth
+news_queries:
+  - S&P 500 AI stocks selloff
+  - Nifty Sensex market today
+  - Trump tariff India
+  - US India trade deal
+  - RBI repo rate inflation
+  - Federal Reserve rate decision
+  - crude oil OPEC price
+  - gold price outlook
+  - Reliance Industries
+  - Alphabet Google stock

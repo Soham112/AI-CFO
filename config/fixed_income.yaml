@@ -1,0 +1,100 @@
+# Guaranteed / low-risk instruments. Rates change quarterly: verify before acting.
+# who: which investor types can buy NEW money into it.
+instruments:
+  epf:
+    name: Employees' Provident Fund (India)
+    rate: 0.0825
+    currency: INR
+    as_of: FY2024-25 declared rate
+    india_tax: exempt_mostly      # interest on employee contribution above Rs 2.5L/yr is taxable
+    us_tax: ordinary              # IRS does not treat EPF as a qualified plan
+    who: [india_employee]
+    liquidity: low
+    note: Only via an Indian employer. An NRI cannot add new money; balance keeps earning interest only while 'active'.
+  ppf:
+    name: Public Provident Fund (India)
+    rate: 0.071
+    currency: INR
+    as_of: Q3 FY2026-27 (verify at nsiindia.gov.in)
+    india_tax: exempt
+    us_tax: ordinary
+    who: [india_resident]
+    liquidity: low (15y lock)
+    note: NRIs cannot open new PPF accounts; existing ones can be continued until maturity, not extended.
+  india_fd_resident:
+    name: Bank FD (India, resident, 1-2y, large bank)
+    rate: 0.0625
+    currency: INR
+    as_of: verify current SBI/HDFC card rate
+    india_tax: slab
+    us_tax: ordinary
+    who: [india_resident]
+    liquidity: medium
+  nre_fd:
+    name: NRE FD (India, 1-2y)
+    rate: 0.065
+    currency: INR
+    as_of: verify current bank card rate
+    india_tax: exempt
+    us_tax: ordinary
+    who: [nri]
+    liquidity: medium
+    note: Tax-free in India but fully taxable in the US for a US tax resident.
+  scss:
+    name: Senior Citizens' Savings Scheme
+    rate: 0.082
+    currency: INR
+    as_of: Q3 FY2026-27 (verify at nsiindia.gov.in)
+    india_tax: slab
+    us_tax: ordinary
+    who: [india_resident]
+    min_age: 60
+    liquidity: low (5y)
+    note: Max Rs 30 lakh per person; interest paid quarterly. Best guaranteed rate for 60+.
+  rbi_frsb:
+    name: RBI Floating Rate Savings Bonds
+    rate: 0.0805
+    currency: INR
+    as_of: resets every 6 months at NSC rate + 0.35% (verify)
+    india_tax: slab
+    us_tax: ordinary
+    who: [india_resident]
+    liquidity: low (7y, earlier for 60+)
+  short_debt_fund:
+    name: Short-duration / money-market debt MF (India)
+    rate: 0.068
+    currency: INR
+    as_of: typical yield-to-maturity, varies
+    india_tax: slab
+    us_tax: ordinary
+    who: [india_resident]
+    liquidity: high
+    note: Taxed at slab (units bought after Apr 2023) but only when sold, so tax is deferred.
+  us_tbill:
+    name: US Treasury bills (3-6m)
+    rate: null                    # taken from live ^IRX when available
+    fallback_rate: 0.040
+    currency: USD
+    us_tax: federal_only          # state tax exempt
+    who: [us_resident]
+    liquidity: high
+  us_hysa:
+    name: US high-yield savings / money market
+    rate: null
+    fallback_rate: 0.038
+    currency: USD
+    us_tax: ordinary
+    who: [us_resident]
+    liquidity: high
+  us_401k_roth:
+    name: 401(k) / Roth IRA (invested in index funds)
+    rate: null                    # equity-like return, see allocation
+    currency: USD
+    us_tax: deferred_or_free
+    who: [us_resident]
+    liquidity: low
+    note: The best tax shelter available to a US resident. Max the employer match before anything else here.
+assumptions:
+  inr_usd_depreciation: 0.03      # long-run average rupee depreciation vs USD per year
+  us_inflation: null              # from snapshot macro.us_cpi_yoy
+  india_inflation: null           # from snapshot macro.india_cpi_yoy

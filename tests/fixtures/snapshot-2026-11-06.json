@@ -1,0 +1,47 @@
+{
+  "as_of": "2026-11-06T20:00Z",
+  "source": "web-search (sandbox could not reach Yahoo/FRED/AMFI; run `python -m dicfo fetch` on your machine for live data)",
+  "markets": {
+    "^GSPC":  {"price": 7399.96, "chg_1d": 0.0063, "high_52w": 7844.67, "off_high_52w": -0.0567, "ret_1m": -0.0595, "trend_hint": "below_200dma"},
+    "^NDX":   {"price": 24655.17, "chg_1d": 0.014, "high_52w": 27599.79, "off_high_52w": -0.1067, "ret_1m": -0.119, "trend_hint": "downtrend"},
+    "^NSEI":  {"price": 25030.35, "chg_1d": 0.0201, "high_52w": 26600, "off_high_52w": -0.059, "ret_1m": 0.1074, "ret_1y": -0.0181, "trend_hint": "uptrend"},
+    "^BSESN": {"price": 81028.02, "chg_1d": 0.0217, "high_52w": 86159.02, "off_high_52w": -0.0596},
+    "GC=F":   {"price": 4066.08, "high_52w": 5608.35, "off_high_52w": -0.275, "ret_1m": -0.0109, "ret_1y": 0.0163, "trend_hint": "downtrend"},
+    "SI=F":   {"price": 51.89, "high_52w": 121.64, "off_high_52w": -0.573, "ret_1m": -0.1316, "ret_1y": 0.0698, "trend_hint": "downtrend"},
+    "BZ=F":   {"price": 98.2, "ret_1m": -0.0199, "ret_1y": 0.5434},
+    "GOOGL":  {"price": 288.12, "chg_1d": 0.0196, "ret_1y": 0.019},
+    "MSFT":   {"price": 532.50, "ret_1y": -0.036},
+    "NVDA":   {"price": 187.30, "chg_1d": 0.042, "ret_1y": -0.086},
+    "RELIANCE.NS": {"price": 1320.0, "ret_1y": -0.144},
+    "HDFCBANK.NS": {"price": 785.45, "ret_1y": -0.227},
+    "TCS.NS": {"price": 2500.0, "ret_1y": -0.183}
+  },
+  "fundamentals": {
+    "GOOGL": {"name": "Alphabet", "pe": 14.61, "forward_pe": 20.25, "peg": 1.55, "roe": 0.4429, "debt_to_equity": 0.22, "op_margin": 0.3332, "fcf": 19.75e9, "eps": 19.15, "bvps": 53.65, "analyst_target": 406.55},
+    "MSFT":  {"name": "Microsoft", "pe": 27.25, "forward_pe": 25.15, "peg": 1.58, "roe": 0.3422, "debt_to_equity": 0.28, "op_margin": 0.471, "fcf": 59.96e9, "eps": 19.15, "bvps": 63.35, "analyst_target": 629.69},
+    "NVDA":  {"name": "Nvidia", "pe": 22.96, "forward_pe": 15.01, "peg": 0.30, "roe": 1.1721, "debt_to_equity": 0.17, "op_margin": 0.6521, "fcf": 127.01e9, "eps": 7.91, "bvps": 9.48, "analyst_target": 327.14},
+    "RELIANCE.NS": {"name": "Reliance Industries", "pe": 23.9, "forward_pe": 20.1, "peg": 1.55, "roe": 0.083, "debt_to_equity": 0.46, "op_margin": 0.1162, "fcf": 691.97e9, "eps": 55.22, "bvps": 668.04, "analyst_target": 1674.6},
+    "HDFCBANK.NS": {"name": "HDFC Bank", "is_bank": true, "pe": 15.3, "forward_pe": 14.0, "roe": 0.1384, "op_margin": 0.3678, "eps": 51.19, "bvps": 393.81, "analyst_target": 994.49},
+    "TCS.NS": {"name": "TCS", "pe": 17.52, "forward_pe": 16.07, "peg": 3.18, "roe": 0.4557, "debt_to_equity": 0.10, "op_margin": 0.2459, "fcf": 492.23e9, "eps": 142.64, "bvps": 328.86, "analyst_target": 2398.0}
+  },
+  "macro": {
+    "us_cpi_yoy": 0.037, "fed_funds": 0.04, "us10y": 0.0486, "us_vix": 24.29,
+    "india_cpi_yoy": 0.0554, "india_repo": 0.055, "usdinr": 94.07, "usdinr_ret_1y": 0.06,
+    "brent": 98.2, "gold_usd": 4066, "silver_usd": 51.89, "sp500_pe": 25.06
+  },
+  "news": [
+    {"title": "S&P 500 sinks 4.4%, Nasdaq drops 5.5% as AI sell-off deepens"},
+    {"title": "Nasdaq rebounds as Dow falls after $3 tn AI selloff"},
+    {"title": "Midterms AI rout: anti-AI candidates win, data center opposition grows"},
+    {"title": "Gold hovers above $4,000 ahead of jobs report; Fed hike odds rise"},
+    {"title": "Sensex soars 1,718 pts, Nifty reclaims 25,000 as FII buying hits 6-year high"},
+    {"title": "Tankers hit by mines in Strait of Hormuz as Trump weighs Iran strikes"},
+    {"title": "SBI Research expects 6% repo rate as inflation forces RBI's hand"},
+    {"title": "India will never open dairy, GM products in US trade deal: Goyal"}
+  ],
+  "notes": [
+    "Premise check: the S&P 500 is about 5.7% below its October 2026 record (7,844.67), not 10%+. The Nasdaq is the one in correction (about -10.7% from its high). Nov 5 was the big drop: S&P -4.36%, Nasdaq -5.52%, chip index -12%.",
+    "Nifty 52-week high is estimated from the Sensex record (86,159, Dec 2025); verify.",
+    "Stock fundamentals from stockanalysis.com (some pages up to 6 weeks old; P/E rescaled to Nov 6 prices for Reliance and HDFC Bank). Gold/silver/Brent/Nifty from tradingeconomics.com; US index levels from Yahoo Finance and JournalArta; India close from HDFC Sky; RBI from Business Today."
+  ]
+}

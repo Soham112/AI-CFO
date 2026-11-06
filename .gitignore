@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+# personal finances never leave the laptop
+profiles/*.yaml
+!profiles/example-*.yaml
+snapshots/
+reports/

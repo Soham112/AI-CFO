@@ -1,0 +1,23 @@
+{"drivers": {
+  "us_equity": {
+    "ai_policy_backlash": {"score": -0.5, "why": "Midterm wins for anti-AI candidates and data-center opposition put AI capex (the market's growth engine) in question; Nasdaq -5.5% and chips -12% on Nov 5 (TheStreet, JournalArta)."},
+    "fed_hike_risk": {"score": -0.25, "why": "CPI 3.7% and a strong +165k jobs print; CME shows ~72% odds of a December hike (Yahoo Finance)."},
+    "quality_on_sale": {"score": 0.25, "why": "Mega-cap forward P/Es compressed (GOOGL ~20x, NVDA ~15x) while cash flows are intact; selloff is policy/sentiment-led, not earnings-led so far."}
+  },
+  "india_equity": {
+    "fii_return": {"score": 0.5, "why": "FIIs bought ~Rs15,000 cr on Nov 5, the biggest day in ~6 years, rotating out of AI-heavy markets (HDFC Sky)."},
+    "already_rallied": {"score": -0.25, "why": "Nifty +8.6% this week and up 7 sessions in a row; chasing after a straight-line rally has poor odds short term."},
+    "rbi_tightening": {"score": -0.25, "why": "RBI hiked to 5.5% in Oct with CPI 5.54% and SBI Research expects 6% by December (Business Today)."},
+    "trade_deal_unresolved": {"score": -0.25, "why": "US-India deal still stuck on dairy/GM red lines (Goyal, Nov 3); exporters (textiles, gems, IT) carry tariff risk."}
+  },
+  "gold": {
+    "geopolitics": {"score": 0.5, "why": "Mines hit tankers in the Strait of Hormuz and Trump is weighing Iran strikes (TheStreet); gold is the hedge."},
+    "deep_reset": {"score": 0.25, "why": "Gold is ~27% below its January record of $5,608 after the blow-off; much of the froth is out."}
+  },
+  "silver": {
+    "industrial_demand_risk": {"score": -0.5, "why": "Silver is 57% off its January spike and still falling (-13% in a month); a slowdown in AI data-center and solar build-outs would hit industrial demand."}
+  },
+  "us_cash_bonds": {
+    "yields_rising": {"score": 0.25, "why": "A December hike would lift T-bill yields; cash is paid ~4% while you wait to deploy."}
+  }
+}}
