@@ -26,3 +26,16 @@ holdings:
     gold: 150000
     india_fixed_income: 1200000 # EPF + PPF + FDs
     us_equity: 0
+
+# What to buy every month (core) and what to buy only on dips (opportunistic).
+plan:
+  core:                         # bought every month regardless of price
+    - {symbol: "120716", type: mf, name: "UTI Nifty 50 Index Fund", monthly: 10000}
+    - {symbol: "122639", type: mf, name: "Parag Parikh Flexi Cap", monthly: 10000}
+    - {symbol: HDFCBANK.NS, type: stock, name: "HDFC Bank", monthly: 5000}
+    - {symbol: GOLDBEES.NS, type: etf, name: "Gold ETF", monthly: 5000, asset_class: gold}
+  opportunistic:                # bought in tranches only when price falls this far from its 52-week high
+    - {symbol: RELIANCE.NS, name: "Reliance", budget: 60000, buy_below_pct: -12, tranches: 3, since: "2026-11-01"}
+    - {symbol: TCS.NS, name: "TCS", budget: 60000, buy_below_pct: -15, tranches: 3, since: "2026-11-01"}
+    - {symbol: GOOGL, name: "Alphabet (via LRS)", budget: 50000, buy_below_pct: -10, tranches: 3, since: "2026-11-01"}
+  opportunistic_monthly_reserve: 10000   # parked in a liquid fund until a trigger hits

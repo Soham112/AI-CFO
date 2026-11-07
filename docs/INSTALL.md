@@ -58,7 +58,14 @@ Test: `.venv/bin/python -m dicfo daily --profile dad --notify email,whatsapp`
 
 The laptop has to be on (or asleep with wake enabled) at that time.
 
-## 5. Smarter briefs with Claude Code (optional)
+## 5. Each month: "Did you invest?"
+The daily message lists core investments not yet recorded this month. After investing, run
+`python -m dicfo checkin --profile dad` and answer y / n / amount for each. Other purchases:
+`python -m dicfo log --profile dad RELIANCE.NS 20000`. Everything goes into
+`profiles/dad-ledger.csv` (open it in Excel any time). Replying on WhatsApp itself isn't supported
+yet: that needs an always-on server, which we're avoiding for now.
+
+## 6. Smarter briefs with Claude Code (optional)
 The scheduled job uses data plus keyword news rules. For real judgement on news, policy, Trump/RBI
 decisions and company events, open the folder in Claude Code and say
 "run the CFO brief for dad". That uses the skills in `.claude/skills/`. Set `DICFO_USE_CLAUDE=1`

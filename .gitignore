@@ -4,6 +4,7 @@ __pycache__/
 .env
 # personal finances never leave the laptop
 profiles/*.yaml
+profiles/*.csv
 !profiles/example-*.yaml
 snapshots/
 reports/

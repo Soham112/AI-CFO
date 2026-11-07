@@ -39,8 +39,15 @@ def summary(r: dict, limit: int = 1500) -> str:
     lines.append("")
     lines.append("Stance (short/medium):")
     for a, s in sorted(r["asset_scores"].items(), key=lambda x: -x[1]["score"]):
+        if not r["allocation"]["tactical"][a]:
+            continue
         v = r["horizon_views"][a]
         lines.append(f"- {LABEL[a]}: {stance(s['score'])} ({v['short']}/{v['medium']}) -> {r['allocation']['tactical'][a]}%")
+    heads = [h["headlines"][0] for h in r.get("news_signals", {}).values() if h.get("headlines")][:3]
+    if heads:
+        lines.append("")
+        lines.append("News driving this:")
+        lines += [f"- {h}" for h in heads]
     top = [s for s in r["stocks"] if s["action"].startswith("ACCUMULATE")][:3]
     if top:
         lines.append("")
@@ -49,7 +56,22 @@ def summary(r: dict, limit: int = 1500) -> str:
     if hi:
         lines.append("")
         lines.append("Action needed: " + "; ".join(i["title"] for i in hi[:2]))
-    if r["monthly_split"]:
+    mp = r.get("monthly_plan") or {}
+    buys = [o for o in mp.get("opportunistic", []) if o["status"] == "BUY"]
+    tops = [c for c in mp.get("core", []) if c["verdict"] != "CONTINUE"]
+    if buys or tops:
+        lines.append("")
+        lines.append("Today:")
+        for o in buys:
+            lines.append(f"- BUY {o['name']}: {o['message']}")
+        for c in tops:
+            lines.append(f"- {c['verdict']} {c['name']}: {c['why']}")
+    if mp.get("pending"):
+        lines.append("")
+        lines.append("Did you invest this month? Not recorded yet: " +
+                     ", ".join(f"{c['name']} {cur}{c['pending']:,.0f}" for c in mp["pending"]))
+        lines.append("Record it: run `python -m dicfo checkin` on the laptop.")
+    if r["monthly_split"] and not mp.get("core"):
         lines.append("")
         lines.append("This month: " + ", ".join(f"{LABEL[a]} {cur}{v:,}" for a, v in
                                                  sorted(r["monthly_split"].items(), key=lambda x: -x[1]) if v))
@@ -104,6 +126,24 @@ def render(r: dict) -> str:
     for a, v in r["horizon_views"].items():
         w(f"| {LABEL[a]} | {v['short']} | {v['medium']} | {v['long']} |")
     w("")
+    mp = r.get("monthly_plan") or {}
+    if mp.get("core") or mp.get("opportunistic"):
+        w(f"## Monthly plan ({mp['month']})")
+        if mp.get("core"):
+            w("**Core: bought every month, whatever the market does.**")
+            w("| Item | Monthly | Verdict | Why | Recorded this month |\n|---|---|---|---|---|")
+            for c in mp["core"]:
+                w(f"| {c['name']} | {cur}{c['monthly']:,.0f} | {c['verdict']} | {c['why']} | {cur}{c['done_this_month']:,.0f} |")
+        if mp.get("opportunistic"):
+            w("\n**Opportunistic: bought only when the price falls to a set level.**")
+            w("| Item | Status | Detail | Budget left |\n|---|---|---|---|")
+            for o in mp["opportunistic"]:
+                w(f"| {o['name']} | {o['status']} | {o['message']} | {cur}{o['budget_left']:,.0f} |")
+        for x in mp.get("warnings", []):
+            w(f"- ⚠️ {x}")
+        if mp.get("reserve_monthly"):
+            w(f"\nPark {cur}{mp['reserve_monthly']:,.0f} a month in a liquid fund as dry powder for opportunistic buys.")
+        w("")
     if r["monthly_split"]:
         w(f"## Where this month's {cur}{sum(r['monthly_split'].values()):,} goes")
         w("| Asset | Amount | How to hold it |\n|---|---|---|")

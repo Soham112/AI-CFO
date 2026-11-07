@@ -8,11 +8,11 @@ from __future__ import annotations
 from . import DISCLAIMER, config
 from .allocation import (LONG_VIEW, VEHICLES_INDIA_RESIDENT, VEHICLES_US_RESIDENT, dip_ladder,
                          score_assets, target)
-from .analysis import fixed_income, horizons, macro as macro_mod, portfolio, tax
+from .analysis import fixed_income, horizons, macro as macro_mod, plan as plan_mod, portfolio, tax
 from .analysis.fundamentals import analyse_stock
 
 
-def run(snap: dict, profile: dict | None = None) -> dict:
+def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = None) -> dict:
     profile = profile or config.load_profile()
     uni = config.load("universe")
     fi_cfg = config.load("fixed_income")
@@ -55,7 +55,8 @@ def run(snap: dict, profile: dict | None = None) -> dict:
         "horizon_views": views,
         "allocation": alloc,
         "monthly_split": monthly_split,
-        "portfolio_review": portfolio.review(profile, snap, tilt),
+        "portfolio_review": portfolio.review(profile, snap, tilt, ledger or []),
+        "monthly_plan": plan_mod.review(profile, snap, ledger or []),
         "dip_plans": {"S&P 500": dip_ladder(mk.get(proxies["us_equity"], {})),
                       "Nifty 50": dip_ladder(mk.get(proxies["india_equity"], {}))},
         "vehicles": vehicles,

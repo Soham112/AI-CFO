@@ -7,6 +7,8 @@
   python -m dicfo stock GOOGL RELIANCE.NS     # deep dive on tickers (live)
   python -m dicfo fixed-income --profile dad  # EPF/PPF/FD/SCSS/T-bill comparison
   python -m dicfo mf-search "parag parikh"    # find AMFI scheme codes
+  python -m dicfo checkin --profile dad       # "did you invest?" for this month's core items
+  python -m dicfo log --profile dad RELIANCE.NS 20000   # record any purchase
 """
 from __future__ import annotations
 
@@ -20,8 +22,9 @@ from .data import snapshot as snapmod
 def _report(snap, profile_name, as_json=False):
     from .engine import run
     from .report import render, summary
+    from . import ledger as led
     profile = config.load_profile(profile_name)
-    res = run(snap, profile)
+    res = run(snap, profile, led.load(config.profile_path(profile_name).stem))
     REPORTS.mkdir(exist_ok=True)
     tag = f"{str(res['as_of'])[:10]}-{str(profile.get('name', 'me')).lower()}"
     (REPORTS / f"dicfo-{tag}.json").write_text(json.dumps(res, indent=2, default=str))
@@ -37,7 +40,7 @@ def main(argv=None):
     sub.add_parser("fetch")
     ob = sub.add_parser("onboard")
     ob.add_argument("--name", required=True)
-    for name in ("report", "daily", "fixed-income"):
+    for name in ("report", "daily", "fixed-income", "checkin"):
         p = sub.add_parser(name)
         p.add_argument("--profile", help="profiles/<name>.yaml (default: $DICFO_PROFILE or first profile)")
         p.add_argument("--snapshot")
@@ -49,6 +52,14 @@ def main(argv=None):
         if name == "daily":
             p.add_argument("--notify", default="", help="comma list: email,whatsapp")
             p.add_argument("--no-fetch", action="store_true")
+    lg = sub.add_parser("log", help="record a purchase")
+    lg.add_argument("--profile")
+    lg.add_argument("symbol")
+    lg.add_argument("amount", type=float)
+    lg.add_argument("--date")
+    lg.add_argument("--name", default="")
+    lg.add_argument("--units", default="")
+    lg.add_argument("--price", default="")
     sp = sub.add_parser("stock")
     sp.add_argument("symbols", nargs="+")
     ms = sub.add_parser("mf-search")
@@ -58,6 +69,18 @@ def main(argv=None):
     if a.cmd == "onboard":
         from .onboard import run
         return run(a.name)
+
+    if a.cmd == "log":
+        from . import ledger as led
+        from .analysis.plan import asset_class
+        name = config.profile_path(a.profile).stem
+        row = {"symbol": a.symbol, "name": a.name or a.symbol, "amount": a.amount, "units": a.units,
+               "price": a.price, "asset_class": asset_class({"symbol": a.symbol, "type": "mf" if a.symbol.isdigit() else "stock"})}
+        if a.date:
+            row["date"] = a.date
+        led.add(name, [row])
+        print(f"recorded {a.symbol} {a.amount:,.0f} in {led.path(name)}")
+        return
 
     if a.cmd == "mf-search":
         import requests
@@ -118,6 +141,9 @@ def main(argv=None):
         return
 
     res, md, short = _report(snap, a.profile)
+    if a.cmd == "checkin":
+        from . import ledger as led
+        return led.checkin(config.profile_path(a.profile).stem, res["monthly_plan"]["pending"])
     if a.cmd == "report":
         print(json.dumps(res, indent=2, default=str) if a.json else short if a.summary else md)
         return

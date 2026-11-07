@@ -32,6 +32,21 @@ what the rules can't see:
 - Real estate concentration.
 For each point say: what, why it matters in rupees per year, the exact change, and the tax cost of making it.
 
-## 3. Respect their choices
+## 3. Build the monthly plan (`plan:` in the profile)
+- **Core** (bought every month whatever the market does): mostly index / flexi-cap funds, a gold
+  ETF, and at most 2-3 very high-quality stocks. Keep single stocks under 40% of the core.
+  Never stop a core SIP because the market fell; that is when it works best. Only stop one if
+  the reason to own it is broken (the report flags REVIEW when business quality drops).
+- **Opportunistic** (bought only on dips): quality stocks or themes they like, each with a budget,
+  a trigger (% below 52-week high) and 3 tranches. A monthly reserve sits in a liquid fund until
+  a trigger hits.
+- Explain the difference in one line: core = time in the market, opportunistic = price discipline.
+
+## 4. Monthly loop
+The daily message asks "Did you invest this month?" for core items not yet recorded. They answer
+with `python -m dicfo checkin --profile <name>` (y / n / amount) or `python -m dicfo log`.
+Purchases go to `profiles/<name>-ledger.csv` and update the portfolio picture.
+
+## 5. Respect their choices
 If they push back with a good reason (liquidity, family needs, comfort), note it in the profile
 under `constraints:` and plan around it. Never pressure; never suggest products that pay you.

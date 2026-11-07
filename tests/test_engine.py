@@ -98,3 +98,19 @@ def test_notify_skips_without_secrets(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     out = notify.send(["email", "whatsapp"], "s", "t", "m")
     assert all("skipped" in o for o in out)
+
+
+def test_core_and_opportunistic_plan_and_ledger(tmp_path, monkeypatch):
+    import datetime as dt
+    from dicfo import ledger as led
+    from dicfo.analysis.plan import review
+    monkeypatch.setattr(led, "PROFILES", tmp_path)
+    prof = {"plan": {"core": [{"symbol": "120716", "type": "mf", "name": "Nifty", "monthly": 10000}],
+                     "opportunistic": [{"symbol": "X.NS", "budget": 30000, "buy_below_pct": -10, "tranches": 3}]}}
+    snap = {"markets": {"X.NS": {"price": 80, "off_high_52w": -0.2}}}
+    r = review(prof, snap, [], dt.date(2026, 11, 7))
+    assert r["pending"][0]["pending"] == 10000
+    assert r["opportunistic"][0]["status"] == "BUY" and "10,000" in r["opportunistic"][0]["message"]
+    led.add("t", [{"date": "2026-11-05", "symbol": "120716", "amount": 10000, "asset_class": "india_equity"}])
+    r = review(prof, snap, led.load("t"), dt.date(2026, 11, 7))
+    assert r["pending"] == []

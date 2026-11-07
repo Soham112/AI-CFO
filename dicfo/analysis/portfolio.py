@@ -7,7 +7,7 @@ THEMATIC = ("sectoral", "thematic", "sector", "psu", "infra", "manufacturing", "
             "banking", "technology", "consumption", "esg", "energy")
 
 
-def current_mix(profile: dict) -> dict:
+def current_mix(profile: dict, ledger: list[dict] | None = None) -> dict:
     h = profile.get("holdings") or {}
     mix = Counter()
     for mf in h.get("mutual_funds", []) or []:
@@ -22,10 +22,15 @@ def current_mix(profile: dict) -> dict:
             mix["india_equity"] += mf.get("value", 0)
     for k, v in (h.get("other") or {}).items():
         mix[k] += v or 0
+    if ledger:   # purchases recorded after the profile was written
+        from ..ledger import totals_by_class
+        for k, v in totals_by_class(ledger).items():
+            mix[k] += v
     return dict(mix)
 
 
-def review(profile: dict, snap: dict, tactical: dict, benchmark_code: str = "120716") -> dict:
+def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None = None,
+           benchmark_code: str = "120716") -> dict:
     h = profile.get("holdings") or {}
     funds = h.get("mutual_funds", []) or []
     mf_data = snap.get("mutual_funds", {})
@@ -82,7 +87,7 @@ def review(profile: dict, snap: dict, tactical: dict, benchmark_code: str = "120
             "See the tax flags. Do not add new money until you've confirmed your tax status.")
 
     # 5. Allocation gaps
-    mix = current_mix(profile)
+    mix = current_mix(profile, ledger)
     total = sum(mix.values())
     gaps = {}
     if total:
