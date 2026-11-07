@@ -38,13 +38,13 @@ def whatsapp(text: str) -> str:
         _https("https://api.twilio.com")
         r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, tok),
                           data={"From": os.environ["TWILIO_WHATSAPP_FROM"], "To": os.environ["TWILIO_WHATSAPP_TO"],
-                                "Body": text[:1600]}, timeout=30)
+                                "Body": text[:1600] if len(text) <= 1600 else text[:text.rfind(chr(10), 0, 1600)]}, timeout=30)
         r.raise_for_status()
         return "whatsapp sent via Twilio"
     phone, key = os.environ.get("CALLMEBOT_PHONE"), os.environ.get("CALLMEBOT_APIKEY")
     if phone and key:
         r = requests.get("https://api.callmebot.com/whatsapp.php",
-                         params={"phone": phone, "text": text[:1500], "apikey": key}, timeout=30)
+                         params={"phone": phone, "text": text, "apikey": key}, timeout=30)
         r.raise_for_status()
         return "whatsapp sent via CallMeBot"
     return "whatsapp skipped: set CALLMEBOT_* or TWILIO_* in .env"

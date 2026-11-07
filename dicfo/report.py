@@ -23,7 +23,7 @@ def stance(score):
             "Neutral" if score > -0.4 else "Underweight" if score > -1.25 else "Strong underweight")
 
 
-def summary(r: dict, limit: int = 1500, redact: bool = True) -> str:
+def summary(r: dict, limit: int = 3000, redact: bool = True) -> str:
     """Short plain-text version for WhatsApp / email.
 
     redact=True (default) leaves out every amount and holding value, because the
@@ -86,7 +86,20 @@ def summary(r: dict, limit: int = 1500, redact: bool = True) -> str:
     lines.append("")
     lines.append("Analysis, not advice.")
     text = "\n".join(lines)
-    return text if len(text) <= limit else text[: limit - 3] + "..."
+    if len(text) <= limit:
+        return text
+    # Too long: drop the news block first, then trim whole lines (never cut mid-word).
+    if "News driving this:" in lines:
+        i = lines.index("News driving this:")
+        j = i + 1
+        while j < len(lines) and lines[j].startswith("- "):
+            j += 1
+        lines = lines[:i - 1] + lines[j:]
+    tail = ["", "Analysis, not advice."]
+    body = lines[:-2]
+    while body and len("\n".join(body + ["(more on the laptop)"] + tail)) > limit:
+        body.pop()
+    return "\n".join(body + ["(more on the laptop)"] + tail)
 
 
 def render(r: dict) -> str:

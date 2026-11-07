@@ -79,7 +79,7 @@ def test_india_resident_dad():
     assert r["portfolio_review"]["total_value"] > 0
     assert set(r["horizon_views"]["gold"]) >= {"short", "medium", "long"}
     from dicfo.report import render, summary
-    assert len(summary(r)) <= 1500 and "Rs" in render(r)
+    assert len(summary(r)) <= 3000 and "Rs" in render(r)
 
 
 def test_review_challenges_bad_portfolio():
@@ -171,3 +171,11 @@ def test_ledger_typo_guard():
     assert not validate_row({"amount": "5000", "date": "2999-01-01"})
     assert not validate_row({"amount": 900000}, planned=5000, confirm=lambda _: "no")
     assert validate_row({"amount": 900000}, planned=5000, confirm=lambda _: "YES")
+
+
+def test_summary_never_cuts_mid_line():
+    from dicfo.data import snapshot as sm
+    from dicfo.report import summary
+    r = run(sm.load(FIX / "snapshot-2026-11-06.json"), config.load_profile("example-india-resident"))
+    s = summary(r, limit=400)
+    assert len(s) <= 400 and s.endswith("Analysis, not advice.") and "(more on the laptop)" in s
