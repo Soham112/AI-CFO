@@ -30,6 +30,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 It asks age, income, monthly investing amount, each mutual fund (find codes with
 `python -m dicfo mf-search "fund name"`), EPF/PPF/FD, gold, stocks. Edit `profiles/dad.yaml` any time.
 
+## 2b. Lock it down (do this once)
+```bash
+.venv/bin/python -m dicfo secure init     # encrypts profiles/ledgers, key goes in the OS keychain
+.venv/bin/python -m dicfo secure check    # should end with OK
+```
+Back up the key (Windows: Credential Manager → "dicfo"; Mac: Keychain Access → "dicfo") in a
+password manager. See [SECURITY.md](../SECURITY.md) for everything that's protected.
+
 ## 3. Try it
 ```bash
 .venv/bin/python -m dicfo fetch

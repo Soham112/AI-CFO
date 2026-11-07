@@ -3,8 +3,9 @@ __pycache__/
 .pytest_cache/
 .env
 # personal finances never leave the laptop
-profiles/*.yaml
-profiles/*.csv
+profiles/*
 !profiles/example-*.yaml
 snapshots/
 reports/
+*.enc
+*.tmp

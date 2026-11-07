@@ -15,19 +15,27 @@ def email(subject: str, text: str, markdown: str | None = None) -> str:
         return "email skipped: set DICFO_SMTP_HOST / DICFO_SMTP_USER / DICFO_SMTP_PASS / DICFO_EMAIL_TO in .env"
     msg = EmailMessage()
     msg["Subject"], msg["From"], msg["To"] = subject, user, to
-    msg.set_content(markdown or text)
-    if markdown:
+    full = os.environ.get("DICFO_EMAIL_FULL") == "1"
+    msg.set_content(text)
+    if markdown and full:
         msg.add_attachment(markdown.encode(), maintype="text", subtype="markdown", filename="dicfo-brief.md")
+    import ssl
     with smtplib.SMTP(host, int(os.environ.get("DICFO_SMTP_PORT", 587)), timeout=30) as s:
-        s.starttls()
+        s.starttls(context=ssl.create_default_context())   # verifies the server certificate
         s.login(user, os.environ.get("DICFO_SMTP_PASS", ""))
         s.send_message(msg)
     return f"email sent to {to}"
 
 
+def _https(url: str):
+    if not url.startswith("https://"):
+        raise ValueError("refusing to send over a non-HTTPS connection")
+
+
 def whatsapp(text: str) -> str:
     sid, tok = os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN")
     if sid and tok:
+        _https("https://api.twilio.com")
         r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, tok),
                           data={"From": os.environ["TWILIO_WHATSAPP_FROM"], "To": os.environ["TWILIO_WHATSAPP_TO"],
                                 "Body": text[:1600]}, timeout=30)
@@ -49,5 +57,5 @@ def send(channels: list[str], subject: str, text: str, markdown: str) -> list[st
             out.append(email(subject, text, markdown) if c == "email" else whatsapp(text) if c == "whatsapp"
                        else f"unknown channel {c}")
         except Exception as e:  # never crash the daily job on a notification failure
-            out.append(f"{c} failed: {e}")
+            out.append(f"{c} failed: {type(e).__name__}")   # no details: they can echo secrets
     return out

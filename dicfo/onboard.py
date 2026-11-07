@@ -21,7 +21,8 @@ def ask(q, default=None, cast=str):
 
 
 def run(name: str):
-    print("DICFO set-up. Press Enter to accept the [default]. Amounts in your home currency.\n")
+    print("DICFO set-up. Press Enter to accept the [default]. Amounts in your home currency.")
+    print("Never type PAN, Aadhaar, bank/demat account numbers, passwords or OTPs: DICFO doesn't need them.\n")
     p = {"name": ask("Name", name)}
     p["age"] = ask("Age", 55, int)
     p["residency"] = ask("Country you live in (India/US)", "India")
@@ -59,7 +60,11 @@ def run(name: str):
                      ("crypto", "Crypto")]:
         other[k] = ask(f"  {label}", 0, float)
     p["holdings"] = {"mutual_funds": funds, "other": other}
-    PROFILES.mkdir(exist_ok=True)
+    from .guardrails import validate_profile
+    from .security import assert_clean, harden, write_private
+    assert_clean(p, "this profile")
+    validate_profile(p)
     path = PROFILES / f"{name}.yaml"
-    path.write_text(yaml.safe_dump(p, sort_keys=False))
+    write_private(path, yaml.safe_dump(p, sort_keys=False).encode())
+    harden()
     print(f"\nSaved {path}. Next: python -m dicfo daily --profile {name}")

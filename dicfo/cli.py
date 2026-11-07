@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 
 from . import REPORTS, config
 from .data import snapshot as snapmod
@@ -30,10 +31,19 @@ def _report(snap, profile_name, as_json=False):
     (REPORTS / f"dicfo-{tag}.json").write_text(json.dumps(res, indent=2, default=str))
     md = render(res)
     (REPORTS / f"dicfo-{tag}.md").write_text(md)
-    return res, md, summary(res)
+    import os
+    return res, md, summary(res, redact=os.environ.get("DICFO_PRIVACY", "strict") != "off")
 
 
 def main(argv=None):
+    from .security import SensitiveDataError
+    try:
+        return _main(argv)
+    except (SensitiveDataError, ValueError, RuntimeError) as e:
+        raise SystemExit(f"\nDICFO stopped: {e}")
+
+
+def _main(argv=None):
     config.load_env()
     ap = argparse.ArgumentParser(prog="dicfo")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -60,11 +70,35 @@ def main(argv=None):
     lg.add_argument("--name", default="")
     lg.add_argument("--units", default="")
     lg.add_argument("--price", default="")
+    sc = sub.add_parser("secure", help="encryption and permissions")
+    sc.add_argument("action", choices=["init", "check", "harden"])
     sp = sub.add_parser("stock")
     sp.add_argument("symbols", nargs="+")
     ms = sub.add_parser("mf-search")
     ms.add_argument("query")
     a = ap.parse_args(argv)
+
+    if a.cmd == "secure":
+        from . import security
+        if a.action == "init":
+            return security.init()
+        if a.action == "harden":
+            print("fixed:", security.harden() or "nothing")
+            return
+        ok = True
+        print("encryption key:", "found" if security.get_key() else "NOT SET (run: python -m dicfo secure init)")
+        plain = [p.name for p in config.PROFILES.glob("*") if p.suffix in (".yaml", ".csv")
+                 and not p.name.startswith("example-")]
+        if plain:
+            ok = False
+            print("unencrypted personal files:", ", ".join(plain))
+        import subprocess
+        hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=config.ROOT, capture_output=True, text=True).stdout.strip()
+        print("git guard:", "on" if hp == "scripts/hooks" else "OFF")
+        ok = ok and hp == "scripts/hooks"
+        print("privacy mode:", os.environ.get("DICFO_PRIVACY", "strict"))
+        print("OK" if ok else "ACTION NEEDED")
+        return
 
     if a.cmd == "onboard":
         from .onboard import run
@@ -78,6 +112,8 @@ def main(argv=None):
                "price": a.price, "asset_class": asset_class({"symbol": a.symbol, "type": "mf" if a.symbol.isdigit() else "stock"})}
         if a.date:
             row["date"] = a.date
+        if not led.validate_row(row):
+            raise SystemExit(1)
         led.add(name, [row])
         print(f"recorded {a.symbol} {a.amount:,.0f} in {led.path(name)}")
         return

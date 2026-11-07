@@ -16,13 +16,21 @@ def profile_path(name: str | None = None):
     name = name or os.environ.get("DICFO_PROFILE")
     if name:
         return PROFILES / f"{name}.yaml"
-    mine = sorted(p for p in PROFILES.glob("*.yaml") if not p.name.startswith("example-"))
-    return mine[0] if mine else PROFILES / "example-india-resident.yaml"
+    mine = sorted({p.name.removesuffix(".enc") for p in PROFILES.glob("*.yaml*")
+                   if not p.name.startswith("example-") and p.suffix in (".yaml", ".enc")})
+    return PROFILES / mine[0] if mine else PROFILES / "example-india-resident.yaml"
 
 
 def load_profile(name: str | None = None) -> dict:
-    with open(profile_path(name)) as f:
-        p = yaml.safe_load(f) or {}
+    from .guardrails import validate_profile
+    from .security import assert_clean, read_private
+    path = profile_path(name)
+    raw = read_private(path)
+    if raw is None:
+        raise SystemExit(f"No profile at {path}. Run: python -m dicfo onboard --name <name>")
+    p = yaml.safe_load(raw) or {}
+    assert_clean(p, path.name)
+    validate_profile(p)
     p.setdefault("base_currency", "INR" if p.get("residency") == "India" else "USD")
     p.setdefault("spend_currency", p["base_currency"])
     p.setdefault("tax_residency", p.get("residency"))

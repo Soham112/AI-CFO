@@ -114,3 +114,60 @@ def test_core_and_opportunistic_plan_and_ledger(tmp_path, monkeypatch):
     led.add("t", [{"date": "2026-11-05", "symbol": "120716", "amount": 10000, "asset_class": "india_equity"}])
     r = review(prof, snap, led.load("t"), dt.date(2026, 11, 7))
     assert r["pending"] == []
+
+
+def test_sensitive_data_is_refused():
+    import pytest
+    from dicfo.security import SensitiveDataError, assert_clean
+    for bad in ({"pan": "x"}, {"note": "PAN ABCDE1234F"}, {"note": "aadhaar 2345 6789 0123"},
+                {"note": "card 4111 1111 1111 1111"}, {"bank_password": "x"}, {"note": "123-45-6789"}):
+        with pytest.raises(SensitiveDataError):
+            assert_clean(bad, "test")
+    assert_clean({"name": "Dad", "scheme_code": "122639", "value": 500000}, "ok")
+
+
+def test_encryption_roundtrip(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from dicfo import security
+    monkeypatch.setenv("DICFO_KEY", Fernet.generate_key().decode())
+    p = tmp_path / "dad.yaml"
+    security.write_private(p, b"name: Dad\n")
+    assert not p.exists() and (tmp_path / "dad.yaml.enc").exists()
+    assert b"Dad" not in (tmp_path / "dad.yaml.enc").read_bytes()
+    assert security.read_private(p) == b"name: Dad\n"
+    import os, stat
+    assert stat.S_IMODE(os.stat(tmp_path / "dad.yaml.enc").st_mode) == 0o600
+
+
+def test_guardrails():
+    import pytest
+    from dicfo.guardrails import validate_profile
+    with pytest.raises(ValueError):
+        validate_profile({"age": 5})
+    snap = {"as_of": "2020-01-01", "markets": {"^GSPC": technicals.metrics(series(0.3))}, "macro": {}}
+    jobless = config.load_profile("example-india-resident") | {"monthly_income": 0, "employment": "job_searching"}
+    r = run(snap, jobless)
+    assert r["monthly_split"] == {} and not r["data_ok"]
+    assert r["allocation"]["tactical"]["crypto"] <= 3 and r["allocation"]["tactical"]["gold"] <= 15
+    assert abs(sum(r["allocation"]["tactical"].values()) - 100) < 0.5
+    ef_short = config.load_profile("example-india-resident") | {"emergency_fund_have_months": 2}
+    assert list(run(snap, ef_short)["monthly_split"]) == ["us_cash_bonds"]
+
+
+def test_whatsapp_summary_has_no_amounts():
+    import re
+    from dicfo.data import snapshot as sm
+    from dicfo.report import summary
+    snap = sm.load(FIX / "snapshot-2026-11-06.json")
+    r = run(snap, config.load_profile("example-india-resident"), max_data_age_days=10_000)
+    s = summary(r, redact=True)
+    assert not re.search(r"Rs ?[\d,]{4,}", s)
+    assert re.search(r"Rs ?[\d,]{4,}", summary(r, redact=False))
+
+
+def test_ledger_typo_guard():
+    from dicfo.ledger import validate_row
+    assert not validate_row({"amount": "-5"})
+    assert not validate_row({"amount": "5000", "date": "2999-01-01"})
+    assert not validate_row({"amount": 900000}, planned=5000, confirm=lambda _: "no")
+    assert validate_row({"amount": 900000}, planned=5000, confirm=lambda _: "YES")

@@ -23,8 +23,12 @@ def stance(score):
             "Neutral" if score > -0.4 else "Underweight" if score > -1.25 else "Strong underweight")
 
 
-def summary(r: dict, limit: int = 1500) -> str:
-    """Short plain-text version for WhatsApp / email subject lines."""
+def summary(r: dict, limit: int = 1500, redact: bool = True) -> str:
+    """Short plain-text version for WhatsApp / email.
+
+    redact=True (default) leaves out every amount and holding value, because the
+    message passes through third parties (WhatsApp relay, email provider).
+    """
     cur = "Rs " if r.get("currency") == "INR" else "$"
     m = r["macro"]
     lines = [f"DICFO {str(r['as_of'])[:10]} for {r.get('person', 'you')}",
@@ -63,15 +67,19 @@ def summary(r: dict, limit: int = 1500) -> str:
         lines.append("")
         lines.append("Today:")
         for o in buys:
-            lines.append(f"- BUY {o['name']}: {o['message']}")
+            msg = o["message"].split(" Buy one tranche")[0] + " Amount: see the laptop." if redact else o["message"]
+            lines.append(f"- BUY {o['name']}: {msg}")
         for c in tops:
             lines.append(f"- {c['verdict']} {c['name']}: {c['why']}")
     if mp.get("pending"):
         lines.append("")
         lines.append("Did you invest this month? Not recorded yet: " +
-                     ", ".join(f"{c['name']} {cur}{c['pending']:,.0f}" for c in mp["pending"]))
+                     ", ".join(c["name"] if redact else f"{c['name']} {cur}{c['pending']:,.0f}" for c in mp["pending"]))
         lines.append("Record it: run `python -m dicfo checkin` on the laptop.")
-    if r["monthly_split"] and not mp.get("core"):
+    if not r.get("data_ok", True):
+        lines.append("")
+        lines.append("Data check failed today: buy signals paused.")
+    if r["monthly_split"] and not mp.get("core") and not redact:
         lines.append("")
         lines.append("This month: " + ", ".join(f"{LABEL[a]} {cur}{v:,}" for a, v in
                                                  sorted(r["monthly_split"].items(), key=lambda x: -x[1]) if v))
@@ -89,6 +97,11 @@ def render(r: dict) -> str:
     for n in r.get("notes", []):
         w(f"> {n}")
     w("")
+    if r.get("guardrails"):
+        w("## Guardrails applied")
+        for g in r["guardrails"]:
+            w(f"- 🛡️ {g}")
+        w("")
     m = r["macro"]
     w("## Macro dashboard")
     w("| Indicator | Value |\n|---|---|")

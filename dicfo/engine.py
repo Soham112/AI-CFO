@@ -12,7 +12,8 @@ from .analysis import fixed_income, horizons, macro as macro_mod, plan as plan_m
 from .analysis.fundamentals import analyse_stock
 
 
-def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = None) -> dict:
+def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = None,
+        max_data_age_days: float | None = None) -> dict:
     profile = profile or config.load_profile()
     uni = config.load("universe")
     fi_cfg = config.load("fixed_income")
@@ -44,7 +45,7 @@ def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = Non
     monthly_split = {a: round(monthly * w / 100) for a, w in tilt.items() if w > 0}
 
     vehicles = VEHICLES_US_RESIDENT if profile.get("tax_residency") == "US" else VEHICLES_INDIA_RESIDENT
-    return {
+    res = {
         "as_of": snap.get("as_of"),
         "person": profile.get("name"),
         "currency": profile.get("base_currency"),
@@ -70,3 +71,5 @@ def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = Non
         "data_errors": snap.get("errors", []),
         "disclaimer": DISCLAIMER,
     }
+    from .guardrails import MAX_DATA_AGE_DAYS, apply
+    return apply(res, profile, snap, MAX_DATA_AGE_DAYS if max_data_age_days is None else max_data_age_days)

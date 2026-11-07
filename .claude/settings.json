@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/*.enc)",
+      "Edit(./.env)",
+      "Write(./.env)",
+      "Bash(cat .env*)",
+      "Bash(*DICFO_KEY*)",
+      "Bash(git push --force*)",
+      "Bash(git add -f*)",
+      "Bash(git add --force*)",
+      "Bash(git config core.hooksPath*)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(pip install*)",
+      "Bash(rm -rf*)"
+    ],
+    "allow": [
+      "Bash(.venv/bin/python -m dicfo report*)",
+      "Bash(.venv/bin/python -m dicfo fetch*)",
+      "Bash(.venv/bin/python -m dicfo stock*)",
+      "Bash(.venv/bin/python -m dicfo fixed-income*)",
+      "Bash(.venv/bin/python -m pytest*)",
+      "WebSearch"
+    ]
+  }
+}
