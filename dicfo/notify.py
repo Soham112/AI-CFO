@@ -27,35 +27,60 @@ def email(subject: str, text: str, markdown: str | None = None) -> str:
     return f"email sent to {to}"
 
 
-def _https(url: str):
+def _https(url: str):  # noqa: D401
     if not url.startswith("https://"):
         raise ValueError("refusing to send over a non-HTTPS connection")
 
 
+def telegram(text: str) -> str:
+    """Official Telegram Bot API: free, no middleman, no 24-hour window rule."""
+    tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    if not (tok and chat):
+        return "telegram skipped: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env (see docs/INSTALL.md)"
+    url = f"https://api.telegram.org/bot{tok}/sendMessage"
+    _https(url)
+    r = requests.post(url, data={"chat_id": chat, "text": text[:4000], "disable_web_page_preview": "true"},
+                      timeout=30)
+    r.raise_for_status()
+    return "telegram sent"
+
+
+def telegram_chat_id() -> str:
+    """After you message your bot once, this finds your chat id."""
+    tok = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not tok:
+        return "Set TELEGRAM_BOT_TOKEN in .env first."
+    r = requests.get(f"https://api.telegram.org/bot{tok}/getUpdates", timeout=30)
+    r.raise_for_status()
+    chats = {str(u["message"]["chat"]["id"]): u["message"]["chat"].get("first_name", "")
+             for u in r.json().get("result", []) if "message" in u}
+    if not chats:
+        return "No messages yet: open your bot in Telegram, press Start / send 'hi', then run this again."
+    return "\n".join(f"TELEGRAM_CHAT_ID={cid}   ({name})" for cid, name in chats.items())
+
+
 def whatsapp(text: str) -> str:
+    """WhatsApp via Twilio (an official Meta provider). Note WhatsApp's rule: free-form messages
+    only arrive within 24 hours of the recipient's last message to the sender."""
     sid, tok = os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN")
-    if sid and tok:
-        _https("https://api.twilio.com")
-        r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, tok),
-                          data={"From": os.environ["TWILIO_WHATSAPP_FROM"], "To": os.environ["TWILIO_WHATSAPP_TO"],
-                                "Body": text[:1600] if len(text) <= 1600 else text[:text.rfind(chr(10), 0, 1600)]}, timeout=30)
-        r.raise_for_status()
-        return "whatsapp sent via Twilio"
-    phone, key = os.environ.get("CALLMEBOT_PHONE"), os.environ.get("CALLMEBOT_APIKEY")
-    if phone and key:
-        r = requests.get("https://api.callmebot.com/whatsapp.php",
-                         params={"phone": phone, "text": text, "apikey": key}, timeout=30)
-        r.raise_for_status()
-        return "whatsapp sent via CallMeBot"
-    return "whatsapp skipped: set CALLMEBOT_* or TWILIO_* in .env"
+    if not (sid and tok):
+        return "whatsapp skipped: set TWILIO_* in .env"
+    _https("https://api.twilio.com")
+    body = text if len(text) <= 1600 else text[:text.rfind(chr(10), 0, 1600)]
+    r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, tok),
+                      data={"From": os.environ["TWILIO_WHATSAPP_FROM"], "To": os.environ["TWILIO_WHATSAPP_TO"],
+                            "Body": body}, timeout=30)
+    r.raise_for_status()
+    return "whatsapp sent via Twilio"
 
 
 def send(channels: list[str], subject: str, text: str, markdown: str) -> list[str]:
     out = []
     for c in channels:
         try:
-            out.append(email(subject, text, markdown) if c == "email" else whatsapp(text) if c == "whatsapp"
-                       else f"unknown channel {c}")
+            fn = {"email": lambda: email(subject, text, markdown), "telegram": lambda: telegram(text),
+                  "whatsapp": lambda: whatsapp(text)}.get(c)
+            out.append(fn() if fn else f"unknown channel {c}")
         except Exception as e:  # never crash the daily job on a notification failure
             out.append(f"{c} failed: {type(e).__name__}")   # no details: they can echo secrets
     return out

@@ -94,9 +94,9 @@ def test_review_challenges_bad_portfolio():
 
 def test_notify_skips_without_secrets(monkeypatch):
     from dicfo import notify
-    for k in ("DICFO_SMTP_HOST", "CALLMEBOT_PHONE", "TWILIO_ACCOUNT_SID"):
+    for k in ("DICFO_SMTP_HOST", "TELEGRAM_BOT_TOKEN", "TWILIO_ACCOUNT_SID"):
         monkeypatch.delenv(k, raising=False)
-    out = notify.send(["email", "whatsapp"], "s", "t", "m")
+    out = notify.send(["email", "telegram", "whatsapp"], "s", "t", "m")
     assert all("skipped" in o for o in out)
 
 

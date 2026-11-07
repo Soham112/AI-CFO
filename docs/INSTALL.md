@@ -50,13 +50,15 @@ Copy `.env.example` to `.env` and fill in one or both:
 
 - **Email (Gmail):** turn on 2-Step Verification, create an App Password (Google Account → Security →
   App passwords), put it in `DICFO_SMTP_PASS`.
-- **WhatsApp, free (CallMeBot):** from the phone that should receive messages, follow the steps on
-  callmebot.com (WhatsApp API) to get an API key, then set `CALLMEBOT_PHONE` and `CALLMEBOT_APIKEY`.
-  Good for personal use; occasionally slow.
-- **WhatsApp, reliable (Twilio):** create a Twilio account, join the WhatsApp sandbox, fill the
-  `TWILIO_*` values. Costs a few cents per message after the trial.
+- **Telegram (recommended, free, official):** in Telegram search **@BotFather**, send `/newbot`,
+  pick a name, copy the token into `TELEGRAM_BOT_TOKEN`. Open your new bot, press **Start**, then
+  run `python -m dicfo telegram-id` and paste the printed `TELEGRAM_CHAT_ID` into `.env`.
+- **WhatsApp (Twilio, paid):** Twilio is an official Meta provider. Create an account, join the
+  WhatsApp sandbox from your phone, fill the `TWILIO_*` values. WhatsApp only delivers free-form
+  messages within 24 hours of your last message to that number, so daily briefs can fail on quiet
+  days unless a template is approved. CallMeBot-style unofficial relays are deliberately not supported.
 
-Test: `.venv/bin/python -m dicfo daily --profile dad --notify email,whatsapp`
+Test: `.venv/bin/python -m dicfo daily --profile dad --notify telegram,email`
 
 **Schedule it**
 - Windows: Task Scheduler → Create Basic Task → Daily 8:30 AM → Start a program:

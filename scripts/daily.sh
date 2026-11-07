@@ -9,4 +9,4 @@ if command -v claude >/dev/null 2>&1 && [ "${DICFO_USE_CLAUDE:-0}" = "1" ]; then
   claude -p "Use the cfo-market-data and cfo-news-policy skills to write today's overrides files for DICFO. Do not run the report." \
     --allowedTools "Bash(.venv/bin/python:*) WebSearch WebFetch Read Write" || true
 fi
-.venv/bin/python -m dicfo daily --profile "$PROFILE" --notify "${DICFO_NOTIFY:-email,whatsapp}"
+.venv/bin/python -m dicfo daily --profile "$PROFILE" --notify "${DICFO_NOTIFY:-telegram,email}"

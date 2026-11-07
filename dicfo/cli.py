@@ -3,7 +3,7 @@
   python -m dicfo onboard --name dad          # questionnaire -> profiles/dad.yaml
   python -m dicfo fetch                       # live data -> snapshots/snapshot-DATE.json
   python -m dicfo report --profile dad [--snapshot F] [--overrides F]
-  python -m dicfo daily --profile dad --notify email,whatsapp   # fetch + report + send (for cron)
+  python -m dicfo daily --profile dad --notify telegram,email   # fetch + report + send (for cron)
   python -m dicfo stock GOOGL RELIANCE.NS     # deep dive on tickers (live)
   python -m dicfo fixed-income --profile dad  # EPF/PPF/FD/SCSS/T-bill comparison
   python -m dicfo mf-search "parag parikh"    # find AMFI scheme codes
@@ -60,7 +60,7 @@ def _main(argv=None):
             p.add_argument("--json", action="store_true")
             p.add_argument("--summary", action="store_true", help="print the short WhatsApp text")
         if name == "daily":
-            p.add_argument("--notify", default="", help="comma list: email,whatsapp")
+            p.add_argument("--notify", default="", help="comma list: telegram,email,whatsapp")
             p.add_argument("--no-fetch", action="store_true")
     lg = sub.add_parser("log", help="record a purchase")
     lg.add_argument("--profile")
@@ -74,6 +74,7 @@ def _main(argv=None):
     sc.add_argument("action", choices=["init", "check", "harden"])
     sp = sub.add_parser("stock")
     sp.add_argument("symbols", nargs="+")
+    sub.add_parser("telegram-id", help="find your Telegram chat id after messaging your bot")
     ms = sub.add_parser("mf-search")
     ms.add_argument("query")
     a = ap.parse_args(argv)
@@ -116,6 +117,11 @@ def _main(argv=None):
             raise SystemExit(1)
         led.add(name, [row])
         print(f"recorded {a.symbol} {a.amount:,.0f} in {led.path(name)}")
+        return
+
+    if a.cmd == "telegram-id":
+        from .notify import telegram_chat_id
+        print(telegram_chat_id())
         return
 
     if a.cmd == "mf-search":

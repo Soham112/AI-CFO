@@ -9,7 +9,7 @@ the advice safe even when the model is wrong.
 | Laptop file theft / other users | `python -m dicfo secure init` encrypts profiles and ledgers (AES via Fernet). The key lives in the OS keychain (Windows Credential Manager / macOS Keychain). Personal files are owner-only (chmod 600/700). |
 | Storing things that enable fraud | The tool **refuses** to save PAN, Aadhaar, card/account numbers, IFSC, SSN, passwords, PINs, OTPs, demat/login IDs. It never needs them. |
 | Leaking to GitHub | `.gitignore` excludes profiles, ledgers, `.env`, reports, snapshots. A git pre-commit guard blocks those files and ID-like numbers even if someone forces them. |
-| Leaking through messages | WhatsApp and email go through third parties, so by default (`DICFO_PRIVACY=strict`) messages contain **no amounts or holdings**, only market views and to-dos. The full brief is attached to email only if `DICFO_EMAIL_FULL=1`. |
+| Leaking through messages | Only official APIs are used (Telegram Bot API, Twilio for WhatsApp, your own email); unofficial relays such as CallMeBot are not supported. Messages still pass through those providers, so by default (`DICFO_PRIVACY=strict`) messages contain **no amounts or holdings**, only market views and to-dos. The full brief is attached to email only if `DICFO_EMAIL_FULL=1`. |
 | Secrets in code | Email/WhatsApp credentials live only in `.env` (git-ignored, owner-only). Errors never print them. All sending is over verified TLS. |
 | AI assistant overreach | `.claude/settings.json` stops Claude Code from reading `.env`/encrypted files, force-adding, disabling the guard, or curling arbitrary URLs. `CLAUDE.md` forbids asking for IDs, trading, or putting personal data in searches. |
 
