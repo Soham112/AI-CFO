@@ -179,3 +179,51 @@ def test_summary_never_cuts_mid_line():
     r = run(sm.load(FIX / "snapshot-2026-11-06.json"), config.load_profile("example-india-resident"))
     s = summary(r, limit=400)
     assert len(s) <= 400 and s.endswith("Analysis, not advice.") and "(more on the laptop)" in s
+
+
+def test_whatsapp_listener_rules(monkeypatch, tmp_path):
+    from dicfo import whatsapp_listener as wl
+    b = wl.Brain("example-india-resident", {"19455440767"})
+    msg = lambda text, sender="19455440767@s.whatsapp.net", i=None: wl.extract(
+        {"id": i or text, "sender": sender, "chat_jid": sender, "content": text})
+    assert b.handle(msg("help", sender="15550001111@s.whatsapp.net")) is None      # stranger ignored
+    assert b.handle(msg("hey how are you")) is None                                # chat ignored
+    assert b.handle(msg(wl.TAG + " help")) is None                                 # own echo ignored
+    assert "commands" in b.handle(msg("help"))
+    assert b.handle(msg("help", i="help")) is None                                 # duplicate id ignored
+    assert "ID or account" in b.handle(msg("invested 5000 PAN ABCDE1234F", i="x1"))
+    monkeypatch.setattr(b, "_result", lambda: ({"monthly_plan": {"month": "2026-11", "core": [
+        {"symbol": "120716", "name": "UTI Nifty 50 Index Fund", "monthly": 10000, "asset_class": "india_equity",
+         "verdict": "CONTINUE", "pending": 10000}], "opportunistic": []}}, "t"))
+    from dicfo import ledger
+    monkeypatch.setattr(ledger, "PROFILES", tmp_path)
+    assert "recorded UTI Nifty" in b.handle(msg("invested 10,000 UTI Nifty", i="x2"))
+    assert "unusual" in b.handle(msg("invested 900000 UTI Nifty", i="x3"))
+    assert "couldn't match" in b.handle(msg("invested 100 dogecoin", i="x4"))
+    assert len(ledger.load("t")) == 1
+
+
+def test_whatsapp_listener_http_auth():
+    import threading, urllib.request, urllib.error
+    from http.server import ThreadingHTTPServer
+    from dicfo import whatsapp_listener as wl
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), wl.make_handler(wl.Brain(None, {"1"}), "secret"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_port}/whatsapp/webhook"
+    def post(tok):
+        req = urllib.request.Request(url, data=b'{"content":"hi"}', headers={"X-Bridge-Token": tok}, method="POST")
+        try:
+            return urllib.request.urlopen(req).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    assert post("wrong") == 401 and post("secret") == 200
+    srv.shutdown()
+
+
+def test_telegram_update_parsing_and_allowlist():
+    from dicfo.telegram_listener import to_message
+    from dicfo.whatsapp_listener import Brain
+    b = Brain(None, {"111"})
+    mine = to_message({"update_id": 1, "message": {"chat": {"id": 111}, "text": "help", "date": 0}})
+    other = to_message({"update_id": 2, "message": {"chat": {"id": 222}, "text": "help", "date": 0}})
+    assert "commands" in b.handle(mine) and b.handle(other) is None

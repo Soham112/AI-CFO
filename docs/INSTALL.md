@@ -60,6 +60,8 @@ Copy `.env.example` to `.env` and fill in one or both:
 
 Test: `.venv/bin/python -m dicfo daily --profile dad --notify telegram,email`
 
+Two-way commands from the phone (`brief`, `plan`, `invested 10000 UTI Nifty`): see [MESSAGING.md](MESSAGING.md).
+
 **Schedule it**
 - Windows: Task Scheduler → Create Basic Task → Daily 8:30 AM → Start a program:
   `powershell.exe` with arguments `-ExecutionPolicy Bypass -File "C:\Users\<you>\Documents\DICFO\scripts\daily.ps1" -Profile dad`.

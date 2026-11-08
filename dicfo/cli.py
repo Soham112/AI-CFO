@@ -74,6 +74,10 @@ def _main(argv=None):
     sc.add_argument("action", choices=["init", "check", "harden"])
     sp = sub.add_parser("stock")
     sp.add_argument("symbols", nargs="+")
+    wl = sub.add_parser("whatsapp-listen", help="answer WhatsApp commands via the whatsapp-mcp bridge")
+    wl.add_argument("--profile")
+    tl = sub.add_parser("telegram-listen", help="two-way Telegram bot (fixed commands, allowed chats only)")
+    tl.add_argument("--profile")
     sub.add_parser("telegram-id", help="find your Telegram chat id after messaging your bot")
     ms = sub.add_parser("mf-search")
     ms.add_argument("query")
@@ -118,6 +122,14 @@ def _main(argv=None):
         led.add(name, [row])
         print(f"recorded {a.symbol} {a.amount:,.0f} in {led.path(name)}")
         return
+
+    if a.cmd == "whatsapp-listen":
+        from .whatsapp_listener import serve
+        return serve(a.profile)
+
+    if a.cmd == "telegram-listen":
+        from .telegram_listener import listen
+        return listen(a.profile)
 
     if a.cmd == "telegram-id":
         from .notify import telegram_chat_id

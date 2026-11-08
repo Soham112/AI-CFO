@@ -34,7 +34,8 @@ def _https(url: str):  # noqa: D401
 
 def telegram(text: str) -> str:
     """Official Telegram Bot API: free, no middleman, no 24-hour window rule."""
-    tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    tok = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat = (os.environ.get("TELEGRAM_CHAT_ID") or "").split(",")[0].strip()
     if not (tok and chat):
         return "telegram skipped: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env (see docs/INSTALL.md)"
     url = f"https://api.telegram.org/bot{tok}/sendMessage"
@@ -74,12 +75,22 @@ def whatsapp(text: str) -> str:
     return "whatsapp sent via Twilio"
 
 
+def whatsapp_bridge(text: str) -> str:
+    """WhatsApp through the local whatsapp-mcp bridge (unofficial, linked-device). See docs/WHATSAPP.md."""
+    to = os.environ.get("DICFO_WA_DAILY_TO")
+    if not to:
+        return "whatsapp-bridge skipped: set DICFO_WA_DAILY_TO (and the bridge settings) in .env"
+    from .whatsapp_listener import TAG, send as bridge_send
+    bridge_send(to, f"{TAG}\n{text}")
+    return "whatsapp sent via local bridge"
+
+
 def send(channels: list[str], subject: str, text: str, markdown: str) -> list[str]:
     out = []
     for c in channels:
         try:
             fn = {"email": lambda: email(subject, text, markdown), "telegram": lambda: telegram(text),
-                  "whatsapp": lambda: whatsapp(text)}.get(c)
+                  "whatsapp": lambda: whatsapp(text), "whatsapp-bridge": lambda: whatsapp_bridge(text)}.get(c)
             out.append(fn() if fn else f"unknown channel {c}")
         except Exception as e:  # never crash the daily job on a notification failure
             out.append(f"{c} failed: {type(e).__name__}")   # no details: they can echo secrets
