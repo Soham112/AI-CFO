@@ -238,3 +238,99 @@ def menu(profile: dict) -> dict:
     lang = profile.get("language", "en")
     return {"text": t(lang, "menu"), "buttons": [[(t(lang, "m_today"), "m|today"), (t(lang, "m_month"), "m|month"),
                                                   (t(lang, "m_help"), "m|help")]]}
+
+
+# ---------------- Simple one-message format (current default) ----------------
+PLAIN = {"us_equity": "US shares", "india_equity": "Indian shares", "emerging_equity": "Other countries' shares",
+         "gold": "Gold", "silver": "Silver", "crypto": "Crypto", "india_fixed_income": "FD / PPF / EPF",
+         "us_cash_bonds": "Cash / savings"}
+
+
+def _how_far(off_high) -> str:
+    if off_high is None:
+        return ""
+    d = abs(off_high) * 100
+    if d < 3:
+        return "near its best level this year"
+    return f"{d:.0f}% below its best level this year"
+
+
+def simple_message(r: dict, profile: dict, today: dt.date | None = None, checkin_from_day: int = 1) -> str:
+    """One plain-English text message. No buttons, no jargon."""
+    cur = r.get("currency", "INR")
+    first = (profile.get("name") or "").split()[0] if profile.get("name") else ""
+    today = today or dt.date.today()
+    sc = r.get("asset_scores", {})
+    mp = r.get("monthly_plan") or {}
+    L = [f"Good morning{(' ' + first) if first else ''} ☀️", ""]
+
+    L.append("Markets today:")
+    for key, label in (("india_equity", "Indian market (Nifty)"), ("us_equity", "US market (S&P 500)"), ("gold", "Gold")):
+        m = (sc.get(key) or {}).get("proxy_metrics") or {}
+        if m.get("price"):
+            L.append(f"• {label}: {_how_far(m.get('off_high_52w'))}")
+    L.append("")
+
+    todo = []
+    for o in mp.get("opportunistic", []):
+        if o["status"] == "BUY":
+            amt = o["budget_left"] / 3
+            todo.append(f"• {o['name']} is {abs(o.get('off_high') or 0) * 100:.0f}% cheaper than its best price this "
+                        f"year. Plan: buy {_amt(amt, cur)} now. Buy the rest later, in 2 more parts, only if it falls further.")
+    for c in mp.get("core", []):
+        if c["verdict"] == "CONTINUE + TOP-UP":
+            todo.append(f"• {c['name']} is on sale. If you have spare money, add one extra {_amt(c['monthly'], cur)} this month.")
+        elif c["verdict"] == "REVIEW":
+            todo.append(f"• {c['name']}: the company looks weaker. Don't add new money until we talk.")
+    L.append("What to do today:")
+    L += todo or ["• Nothing new. Keep your monthly SIPs going. 👍"]
+    L.append("")
+
+    more = [PLAIN[a] for a, s in sc.items() if s["score"] >= 0.4 and r["allocation"]["tactical"].get(a)]
+    slow = [PLAIN[a] for a, s in sc.items() if s["score"] <= -0.4 and r["allocation"]["tactical"].get(a)]
+    if more:
+        L.append("Good to add a little more: " + ", ".join(more))
+    if slow:
+        L.append("Go slow on new money: " + ", ".join(slow))
+    if more or slow:
+        L.append("")
+
+    pending = mp.get("pending", []) if today.day >= checkin_from_day else []
+    if pending:
+        L.append("This month's SIPs not marked done yet:")
+        L += [f"• {c['name']} ({_amt(c['pending'], cur)})" for c in pending]
+        L.append("After it's paid, reply: done " + " ".join(pending[0]["name"].split()[:2]))
+        L.append("")
+
+    if not r.get("data_ok", True):
+        L.append("(Today's price data looked wrong, so there are no buy ideas today.)")
+    L.append("This is a suggestion to think about, not a guarantee.")
+    return "\n".join(L)
+
+
+def simple_month(r: dict, profile: dict) -> str:
+    cur = r.get("currency", "INR")
+    mp = r.get("monthly_plan") or {}
+    try:
+        label = dt.datetime.strptime(mp.get("month", ""), "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        label = mp.get("month", "")
+    L = [f"Your plan for {label}:", "", "Monthly SIPs:"]
+    L += [f"• {c['name']} {_amt(c['monthly'], cur)}: {'done ✅' if not c['pending'] else 'not done yet'}"
+          for c in mp.get("core", [])]
+    if mp.get("opportunistic"):
+        L += ["", "Buy only when cheap:"]
+        word = {"BUY": "cheap now, buy a part", "WAIT": "not cheap enough yet, wait", "DONE": "fully bought",
+                "SKIP": "skip for now (company looks weak)", "PAUSED": "paused today", "CAPPED": "amount too big, reduce it",
+                "NO DATA": "no price yet"}
+        L += [f"• {o['name']}: {word.get(o['status'], o['status'].lower())}" for o in mp["opportunistic"]]
+    return "\n".join(L)
+
+
+SIMPLE_HELP = ("I'm your Personal CFO. Every morning I send one message.\n\n"
+               "You can reply with:\n"
+               "• today: today's message again\n"
+               "• month: this month's plan\n"
+               "• done UTI Nifty: mark a SIP as paid\n"
+               "• invested 20000 TCS: note any other purchase\n\n"
+               "Never send PAN, Aadhaar, bank numbers or passwords here.")

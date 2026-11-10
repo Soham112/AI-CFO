@@ -12,16 +12,13 @@
 2. Open your new bot and press **Start**. Run `python -m dicfo telegram-id` and put the printed
    `TELEGRAM_CHAT_ID=` line in `.env` (comma-separate several people; the first gets the daily brief).
 3. Daily brief: `python -m dicfo daily --profile dad --notify telegram`.
-4. Two-way: `python -m dicfo telegram-listen --profile dad`. Then everything is tap-to-use:
-   - Say **hi** → menu buttons: 📊 Today · 📅 This month · ❓ Help
-   - Buy ideas arrive as cards: "🟢 Good time to buy TCS … buy ₹20,000 now (part 1 of 3)"
-     with **[✅ I bought it] [⏭ Skip] [📖 Why?]**
-   - From the 5th of each month: "📅 Did your ₹10,000 for UTI Nifty go in?" **[Yes] [No] [Other amount]**
-   - **/setup** → the bot asks questions one at a time (language, age, income, funds…) and creates the profile.
-     No terminal needed.
-   - Languages: English, हिन्दी, मराठी (`language:` in the profile, or picked during /setup).
-   - Quiet days: one short "nothing to do today" line.
-   - Optional: `TELEGRAM_DETAIL_CHAT_ID=<your chat>` sends you (Soh) the detailed version too.
+4. Two-way: `python -m dicfo telegram-listen --profile dad`. One plain-English message arrives each
+   morning (what the markets did, what to do today, which SIPs aren't marked paid yet). Replies:
+   - `today` (today's message again) · `month` (this month's plan) · `help`
+   - `done UTI Nifty` marks this month's SIP as paid
+   - `invested 20000 TCS` notes any other purchase
+   - `/setup` answers about 13 simple questions (reply with numbers) to create the profile, no terminal needed
+   - Optional: `TELEGRAM_DETAIL_CHAT_ID=<your chat>` also sends you (Soh) the detailed version.
 5. Keep it running at login: `scripts/autostart/` has a macOS LaunchAgent and a Windows script.
 
 ## Safety rules (both listeners)

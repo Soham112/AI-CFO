@@ -1,10 +1,7 @@
 """Two-way Telegram bot ("AI Personal CFO") using long polling: no server, no open port.
 
-Built for non-technical users: tap buttons instead of typing commands.
-  • Daily cards with [I bought it] [Skip] [Why?]
-  • Monthly "Did your SIP go in?" [Yes] [No] [Other amount]
-  • Menu: [Today] [This month] [Help]
-  • /setup: answer questions one at a time to create the profile
+Built for non-technical users: one plain-English message a day, and simple replies:
+  today · month · done <SIP name> · invested <amount> <name> · help · /setup
 Only allow-listed chats get answers; everything else is ignored.
 
 Run:  python -m dicfo telegram-listen --profile dad
@@ -32,11 +29,15 @@ def _call(tok: str, method: str, **data):
 
 
 def send_card(tok: str, chat: str, card: dict):
-    data = {"chat_id": chat, "text": card["text"][:4000], "parse_mode": "HTML", "disable_web_page_preview": "true"}
+    data = {"chat_id": chat, "text": card["text"][:4000], "disable_web_page_preview": "true"}   # plain text
     if card.get("buttons"):
         data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": l, "callback_data": d[:64]} for l, d in row]
                                                                for row in card["buttons"]]})
     return _call(tok, "sendMessage", **data)
+
+
+def _esc(s: str) -> str:
+    return s      # messages are sent as plain text, nothing to escape
 
 
 def to_message(update: dict) -> dict | None:
@@ -112,20 +113,17 @@ class Bot:
             return self._start_onboarding(chat)
         if self._profile() is None:
             return self._start_onboarding(chat)
-        if low in ("/start", "hi", "hello", "menu", "/menu", "namaste", "नमस्ते"):
-            return self._send(chat, friendly.menu(self._profile()))
-        if low in ("brief", "today", "/today"):
+        if low in ("/start", "hi", "hello", "menu", "/menu", "namaste", "help", "/help"):
+            return self._send(chat, {"text": _esc(friendly.SIMPLE_HELP), "buttons": []})
+        if low in ("brief", "today", "/today", "summary"):
             return self._today(chat)
         if low in ("plan", "month", "/month"):
             return self._month(chat)
-        if low in ("help", "/help"):
-            return self._send(chat, {"text": friendly.t(self._profile().get("language", "en"), "help"), "buttons": []})
+        if low.startswith("done "):
+            return self._done(chat, low[5:].strip())
         reply = self.brain.handle({"id": f"tg{update_id}", "sender": chat, "chat": chat, "text": text,
                                    "event": "message"})
-        if reply:
-            self._send(chat, {"text": reply, "buttons": []})
-        else:
-            self._send(chat, friendly.menu(self._profile()))
+        self._send(chat, {"text": _esc(reply) if reply else _esc(friendly.SIMPLE_HELP), "buttons": []})
 
     def on_button(self, chat: str, data: str) -> str:
         """Handle a button tap. Returns a short toast text."""
@@ -163,17 +161,30 @@ class Bot:
     # ---------- flows ----------
     def _today(self, chat):
         r, _ = self._result()
-        for card in friendly.daily_cards(r, self._profile()):
-            self._send(chat, card)
+        self._send(chat, {"text": _esc(friendly.simple_message(r, self._profile())), "buttons": []})
 
     def _month(self, chat):
         r, _ = self._result()
-        self._send(chat, {"text": friendly.month_view(r, self._profile()), "buttons": []})
+        self._send(chat, {"text": _esc(friendly.simple_month(r, self._profile())), "buttons": []})
+
+    def _done(self, chat, what: str):
+        """'done UTI Nifty' marks this month's SIP as paid at its planned amount."""
+        import re as _re
+        r, _ = self._result()
+        tokens = set(_re.findall(r"\w+", what))
+        core = r["monthly_plan"]["core"]
+        best = max(core, key=lambda c: len(tokens & set(_re.findall(r"\w+", c["name"].lower()))), default=None)
+        if not best or not tokens & set(_re.findall(r"\w+", best["name"].lower())):
+            names = ", ".join(c["name"] for c in core)
+            return self._send(chat, {"text": _esc(f"I couldn't find '{what}'. Your SIPs are: {names}"), "buttons": []})
+        if not best["pending"]:
+            return self._send(chat, {"text": _esc(f"{best['name']} is already marked done this month ✅"), "buttons": []})
+        self._send(chat, {"text": _esc(self._record(chat, best["symbol"], best["pending"], "telegram-done")), "buttons": []})
 
     def _start_onboarding(self, chat):
         from .chat_onboard import Onboarding
         self.onboarding[chat] = Onboarding()
-        self._send(chat, {"text": "Let's set up your Personal CFO. About 2 minutes. 🙂\n"
+        self._send(chat, {"text": "Let's set up your Personal CFO. It takes about 2 minutes. 🙂\n"
                                   "Never send PAN, Aadhaar, account numbers or passwords.", "buttons": []})
         self._send(chat, self.onboarding[chat].current())
 
@@ -196,7 +207,7 @@ class Bot:
             del self.onboarding[chat]
             self._send(chat, {"text": done, "buttons": []})
             if self._profile():
-                self._send(chat, friendly.menu(self._profile()))
+                self._send(chat, {"text": friendly.SIMPLE_HELP, "buttons": []})
         else:
             self._send(chat, ob.current())
         return ""
@@ -208,12 +219,11 @@ def push_daily(r: dict, profile: dict) -> str:
     chats = [x.strip() for x in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if x.strip()]
     if not (tok and chats):
         return "telegram skipped: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env"
-    for card in friendly.daily_cards(r, profile):
-        send_card(tok, chats[0], card)
+    send_card(tok, chats[0], {"text": _esc(friendly.simple_message(r, profile)), "buttons": []})
     detail = os.environ.get("TELEGRAM_DETAIL_CHAT_ID")
     if detail:
         from .report import summary
-        send_card(tok, detail, {"text": summary(r, redact=False).replace("<", "&lt;"), "buttons": []})
+        send_card(tok, detail, {"text": summary(r, redact=False), "buttons": []})
     return "telegram sent"
 
 

@@ -11,8 +11,6 @@ import yaml
 
 # (key, question, choices or None for typed number/text, kind)
 QUESTIONS = [
-    ("language", "Which language should I use? / भाषा चुनें / भाषा निवडा",
-     [("English", "en"), ("हिन्दी", "hi"), ("मराठी", "mr")], "choice"),
     ("name", "What should I call you? (just a first name)", None, "text"),
     ("age", "How old are you?", None, "int"),
     ("employment", "What do you do?", [("Salaried job", "salaried"), ("Own business", "business"),
@@ -27,8 +25,8 @@ QUESTIONS = [
      [("Sell to stop losses", "conservative"), ("Wait it out", "moderate"),
       ("Buy a little more", "moderately_aggressive"), ("Buy a lot more", "aggressive")], "choice"),
     ("tax_regime", "Which income-tax regime do you use?", [("New", "new"), ("Old", "old"), ("Not sure", "new")], "choice"),
-    ("funds", "Now your mutual funds. Send one per message like:\n<i>Parag Parikh Flexi Cap 500000 SIP 10000</i>\n"
-              "(name, current value, monthly SIP). Send <b>done</b> when finished.", None, "funds"),
+    ("funds", "Now your mutual funds. Send one per message like:\nParag Parikh Flexi Cap 500000 SIP 10000\n"
+              "(name, current value, monthly SIP). Send done when finished.", None, "funds"),
     ("india_fixed_income", "Total in EPF + PPF + FDs + bonds? (number, 0 if none)", None, "money"),
     ("gold", "Gold you hold as ETF/SGB/coins (skip jewellery)? (number, 0 if none)", None, "money"),
     ("india_equity", "Shares you hold directly (not through funds)? (number, 0 if none)", None, "money"),
@@ -42,18 +40,21 @@ class Onboarding:
 
     def current(self) -> dict:
         key, q, choices, kind = QUESTIONS[self.i]
-        btns = [[(label, f"q|{self.i}|{val}") for label, val in choices[r:r + 2]] for r in range(0, len(choices), 2)] if choices else []
-        return {"text": f"({self.i + 1}/{len(QUESTIONS)}) {q}", "buttons": btns}
+        opts = "\n" + "\n".join(f"{n}. {label}" for n, (label, _) in enumerate(choices, 1)) + \
+            "\nReply with the number." if choices else ""
+        return {"text": f"({self.i + 1}/{len(QUESTIONS)}) {q}{opts}", "buttons": []}
 
     def answer(self, value: str) -> str | None:
         """Return an error message, or None if accepted (then call current() / finished())."""
         key, _, choices, kind = QUESTIONS[self.i]
         v = value.strip()
         if kind == "choice":
-            vals = {str(c[1]): c[1] for c in choices}
-            if v not in vals:
-                return "Please tap one of the buttons."
-            self.ans[key] = vals[v]
+            vals = {str(n): c[1] for n, c in enumerate(choices, 1)}
+            vals.update({str(c[1]): c[1] for c in choices})
+            vals.update({c[0].lower(): c[1] for c in choices})
+            if v.lower() not in vals:
+                return f"Please reply with a number from 1 to {len(choices)}."
+            self.ans[key] = vals[v.lower()]
         elif kind in ("int", "money"):
             n = v.replace(",", "").replace("₹", "").strip()
             if not n.replace(".", "", 1).isdigit():
@@ -69,12 +70,12 @@ class Onboarding:
             if v.lower() != "done":
                 m = FUND_RX.match(v)
                 if not m:
-                    return "Format: <i>Fund name value SIP monthly</i>, e.g. <i>UTI Nifty 50 Index 300000 SIP 10000</i>"
+                    return "Please write it like: UTI Nifty 50 Index 300000 SIP 10000"
                 self.funds.append({"name": m["name"].strip(), "value": int(m["value"].replace(",", "")),
                                    "sip_monthly": int((m["sip"] or "0").replace(",", "")),
                                    "plan": "regular" if "regular" in m["name"].lower() else "direct",
                                    "category": _guess_category(m["name"])})
-                return f"Added {m['name'].strip()} ✅ Send the next fund, or <b>done</b>."
+                return f"Added {m['name'].strip()} ✅ Send the next fund, or done."
         self.i += 1
         return None
 
@@ -86,7 +87,7 @@ class Onboarding:
         core = [{"symbol": f.get("scheme_code") or f["name"], "type": "mf", "name": f["name"], "monthly": f["sip_monthly"]}
                 for f in self.funds if f["sip_monthly"]]
         return {
-            "name": a.get("name"), "language": a.get("language", "en"), "age": a.get("age"),
+            "name": a.get("name"), "language": "en", "age": a.get("age"),
             "residency": "India", "tax_residency": "India", "citizenship": "India",
             "employment": a.get("employment"), "base_currency": "INR", "spend_currency": "INR",
             "monthly_income": a.get("monthly_income"), "monthly_investable": a.get("monthly_investable"),
