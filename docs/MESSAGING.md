@@ -12,18 +12,23 @@
 2. Open your new bot and press **Start**. Run `python -m dicfo telegram-id` and put the printed
    `TELEGRAM_CHAT_ID=` line in `.env` (comma-separate several people; the first gets the daily brief).
 3. Daily brief: `python -m dicfo daily --profile dad --notify telegram`.
-4. Two-way: `python -m dicfo telegram-listen --profile dad`, then message the bot:
-   - `brief` → today's summary
-   - `plan` → this month's core / opportunistic status
-   - `invested 10000 UTI Nifty` → records the purchase in the encrypted ledger
-   - `help`
+4. Two-way: `python -m dicfo telegram-listen --profile dad`. Then everything is tap-to-use:
+   - Say **hi** → menu buttons: 📊 Today · 📅 This month · ❓ Help
+   - Buy ideas arrive as cards: "🟢 Good time to buy TCS … buy ₹20,000 now (part 1 of 3)"
+     with **[✅ I bought it] [⏭ Skip] [📖 Why?]**
+   - From the 5th of each month: "📅 Did your ₹10,000 for UTI Nifty go in?" **[Yes] [No] [Other amount]**
+   - **/setup** → the bot asks questions one at a time (language, age, income, funds…) and creates the profile.
+     No terminal needed.
+   - Languages: English, हिन्दी, मराठी (`language:` in the profile, or picked during /setup).
+   - Quiet days: one short "nothing to do today" line.
+   - Optional: `TELEGRAM_DETAIL_CHAT_ID=<your chat>` sends you (Soh) the detailed version too.
 5. Keep it running at login: `scripts/autostart/` has a macOS LaunchAgent and a Windows script.
 
 ## Safety rules (both listeners)
 - Only allow-listed chats/numbers get answers; everyone else is silently ignored.
 - Only the four fixed commands run. No shell, no free-form AI, no file access.
 - Messages containing ID/account-number patterns are refused.
-- Replies leave out amounts (privacy mode); 20 commands/hour limit; duplicates and old backlog ignored.
+- Telegram cards show suggested buy amounts but never totals or holdings (`DICFO_SHOW_AMOUNTS=0` hides amounts too); 20 commands/hour limit; duplicates and old backlog ignored.
 - Unusual amounts can't be recorded from chat; they must be confirmed on the laptop.
 
 ## WhatsApp via whatsapp-mcp (optional, unofficial)

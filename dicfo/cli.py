@@ -205,8 +205,15 @@ def _main(argv=None):
     print(short)
     if a.notify:
         from .notify import send
-        for line in send([c.strip() for c in a.notify.split(",") if c.strip()],
-                         f"DICFO brief {day} for {res.get('person')}", short, md):
+        chans = [c.strip() for c in a.notify.split(",") if c.strip()]
+        if "telegram" in chans:      # Telegram gets the simple tap-button cards
+            chans.remove("telegram")
+            from .telegram_listener import push_daily
+            try:
+                print(push_daily(res, config.load_profile(a.profile)))
+            except Exception as e:
+                print("telegram failed:", type(e).__name__)
+        for line in send(chans, f"DICFO brief {day} for {res.get('person')}", short, md):
             print(line)
 
 

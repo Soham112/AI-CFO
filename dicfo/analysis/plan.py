@@ -82,11 +82,11 @@ def review(profile: dict, snap: dict, ledger: list[dict], today: dt.date | None 
         elif left <= 0:
             status, msg = "DONE", "Budget fully used."
         elif dd <= trig:
-            status, msg = "BUY", (f"{dd * 100:.0f}% below its 52-week high (trigger {trig * 100:.0f}%). Buy one tranche "
+            status, msg = "BUY", (f"{abs(dd) * 100:.0f}% below its 52-week high (trigger {trig * 100:.0f}%). Buy one tranche "
                                   f"of {left / max(1, tranches):,.0f}; next tranche if it falls another 5-8%.")
         else:
-            status, msg = "WAIT", f"Now {dd * 100:.0f}% off the high; trigger is {trig * 100:.0f}%."
-        opp_out.append({"symbol": sym, "name": it.get("name", sym), "status": status, "message": msg,
+            status, msg = "WAIT", f"Now {abs(dd) * 100:.0f}% below the high; buys start at {abs(trig) * 100:.0f}% below."
+        opp_out.append({"symbol": sym, "name": it.get("name", sym), "status": status, "message": msg, "off_high": dd, "trigger": trig,
                         "budget_left": left, "asset_class": asset_class(it)})
 
     pending = [c for c in core_out if c["pending"] > 0]

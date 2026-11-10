@@ -232,3 +232,68 @@ def test_telegram_update_parsing_and_allowlist():
 def test_env_example_has_no_real_secrets():
     from dicfo.config import leaked_example_secrets
     assert leaked_example_secrets() == [], "a secret was typed into .env.example; move it to .env"
+
+
+def _dad_result():
+    from dicfo.data import snapshot as sm
+    snap = sm.load(FIX / "snapshot-2026-11-06.json")
+    snap["markets"]["TCS.NS"]["off_high_52w"] = -0.16      # make one opportunistic BUY fire
+    return run(snap, config.load_profile("example-india-resident"), [], max_data_age_days=10_000)
+
+
+def test_dad_cards_plain_and_buttons():
+    import datetime as dt
+    from dicfo import friendly
+    r = _dad_result()
+    prof = config.load_profile("example-india-resident")
+    cards = friendly.daily_cards(r, prof, today=dt.date(2026, 11, 10))
+    text = " ".join(c["text"] for c in cards)
+    assert "Good time to buy TCS" in text and "₹20,000" in text and "16% cheaper" in text
+    assert "overweight" not in text.lower() and "see the laptop" not in text
+    datas = [d for c in cards for row in c["buttons"] for _, d in row]
+    assert "b|TCS.NS|20000" in datas and any(d.startswith("y|120716|") for d in datas)
+    assert all(len(d) <= 64 for d in datas)
+    hi = friendly.daily_cards(r, prof | {"language": "hi"}, today=dt.date(2026, 11, 10))
+    assert "खरीदने" in hi[1]["text"]
+    quiet = friendly.daily_cards(r, prof | {"plan": {}}, today=dt.date(2026, 11, 1))
+    assert len(quiet) >= 1
+
+
+def test_bot_buttons_record_and_ignore_strangers(monkeypatch, tmp_path):
+    from dicfo import ledger
+    from dicfo.telegram_listener import Bot
+    monkeypatch.setattr(ledger, "PROFILES", tmp_path)
+    r = _dad_result()
+    bot = Bot("example-india-resident", {"111"})
+    monkeypatch.setattr(bot, "_result", lambda: (r, "t"))
+    bot.on_button("999", "b|RELIANCE.NS|20000")
+    assert bot.out == []                                         # stranger: nothing
+    bot.on_button("111", "b|RELIANCE.NS|20000")
+    assert "Saved" in bot.out[-1][1]["text"] and len(ledger.load("t")) == 1
+    bot.on_button("111", "o|120716")
+    bot.on_text("111", "12,000")
+    assert "Saved" in bot.out[-1][1]["text"] and len(ledger.load("t")) == 2
+    bot.on_button("111", "w|RELIANCE.NS")
+    assert "Why" in bot.out[-1][1]["text"]
+    bot.on_text("111", "my pan is ABCDE1234F")
+    assert "ID or account" in bot.out[-1][1]["text"]
+
+
+def test_chat_onboarding_creates_profile(monkeypatch, tmp_path):
+    from dicfo import config as cfg
+    from dicfo.telegram_listener import Bot
+    monkeypatch.setattr(cfg, "PROFILES", tmp_path)
+    import dicfo.security as sec
+    monkeypatch.delenv("DICFO_KEY", raising=False)
+    monkeypatch.setattr(sec, "get_key", lambda: None)
+    bot = Bot("newdad", {"111"})
+    bot.on_text("111", "hi")                                     # no profile -> setup starts
+    assert "set up" in bot.out[0][1]["text"]
+    steps = [("q", "0|hi"), ("t", "Ramesh"), ("t", "58"), ("q", "3|salaried"), ("t", "150000"), ("t", "40000"),
+             ("q", "6|6"), ("q", "7|8"), ("q", "8|moderate"), ("q", "9|new"),
+             ("t", "Parag Parikh Flexi Cap 500000 SIP 10000"), ("t", "done"), ("t", "1200000"), ("t", "0"), ("t", "0")]
+    for kind, v in steps:
+        bot.on_button("111", f"q|{v}") if kind == "q" else bot.on_text("111", v)
+    assert (tmp_path / "newdad.yaml").exists(), [c["text"] for _, c in bot.out[-3:]]
+    p = cfg.load_profile("newdad")
+    assert p["language"] == "hi" and p["plan"]["core"][0]["monthly"] == 10000

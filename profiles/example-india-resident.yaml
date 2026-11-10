@@ -1,6 +1,7 @@
 # Template for an India-resident investor (e.g. Dad). Copy to profiles/<name>.yaml
 # or run:  python -m dicfo onboard --name dad
 name: Dad
+language: en                    # en | hi | mr  (Telegram messages)
 age: 55
 residency: India
 tax_residency: India
