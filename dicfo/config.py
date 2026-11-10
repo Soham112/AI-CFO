@@ -37,8 +37,30 @@ def load_profile(name: str | None = None) -> dict:
     return p
 
 
+SECRET_KEYS = ("TOKEN", "PASS", "APIKEY", "ACCOUNT_SID", "DICFO_KEY")
+
+
+def leaked_example_secrets(path=None) -> list[str]:
+    """Secrets accidentally typed into the git-tracked .env.example."""
+    path = path or ROOT / ".env.example"
+    if not os.path.exists(path):
+        return []
+    bad = []
+    for line in open(path):
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            v = v.strip()
+            if any(t in k.upper() for t in SECRET_KEYS) and v and v not in ("app-password-here", "123456"):
+                bad.append(k.strip())
+    return bad
+
+
 def load_env(path=None):
     """Tiny .env reader so secrets stay out of the code and out of git."""
+    leaked = leaked_example_secrets()
+    if leaked:
+        print(f"WARNING: .env.example (uploaded to GitHub) contains values for {', '.join(leaked)}. "
+              "Move them to .env and blank them in .env.example.")
     path = path or ROOT / ".env"
     if not os.path.exists(path):
         return

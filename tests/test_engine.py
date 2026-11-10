@@ -227,3 +227,8 @@ def test_telegram_update_parsing_and_allowlist():
     mine = to_message({"update_id": 1, "message": {"chat": {"id": 111}, "text": "help", "date": 0}})
     other = to_message({"update_id": 2, "message": {"chat": {"id": 222}, "text": "help", "date": 0}})
     assert "commands" in b.handle(mine) and b.handle(other) is None
+
+
+def test_env_example_has_no_real_secrets():
+    from dicfo.config import leaked_example_secrets
+    assert leaked_example_secrets() == [], "a secret was typed into .env.example; move it to .env"
