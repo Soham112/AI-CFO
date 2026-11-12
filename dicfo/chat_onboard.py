@@ -88,12 +88,13 @@ class Onboarding:
                 if not m or not 0 < qty < 10_000_000:
                     return "Please write the company name and number of shares, like: HDFC Bank 50"
                 from . import config
-                from .names import to_symbol
+                from .names import resolve
                 known = (config.load("universe").get("stocks") or {}).get("india", [])
-                sym, sure = to_symbol(m["name"], known)
+                sym, problem = resolve(m["name"], known, _priced())
+                if problem:
+                    return problem.replace("like: TCS 10", "like: HDFC Bank 50")
                 self.stocks.append({"name": m["name"].strip(), "symbol": sym, "shares": qty})
-                note = "" if sure else " (I don't know this one yet, so I'll keep it but may not have its price)"
-                return f"Added {m['name'].strip()}, {qty} shares ✅{note} Send the next one, or done."
+                return f"Added {m['name'].strip()}, {qty} shares ✅ Send the next one, or done."
         self.i += 1
         return None
 
@@ -117,6 +118,16 @@ class Onboarding:
                          "other": {k: a.get(k, 0) for k in ("india_fixed_income", "gold")}},
             "plan": {"core": core, "opportunistic": [], "opportunistic_monthly_reserve": 0},
         }
+
+
+def _priced() -> set:
+    """Symbols that have a price in the latest market data (a guessed ticker counts only if it's real)."""
+    try:
+        from .data import snapshot as sm
+        lp = sm.latest()
+        return {k for k, v in (sm.load(lp).get("markets", {}) if lp else {}).items() if (v or {}).get("price")}
+    except Exception:
+        return set()
 
 
 def _guess_category(name: str) -> str:

@@ -121,15 +121,15 @@ class Bot:
             return None
         from . import config
         from .ledger import add
-        from .names import to_symbol
+        from .chat_onboard import _priced
+        from .names import resolve
         known = (config.load("universe").get("stocks") or {}).get("india", [])
-        sym, _ = to_symbol(name, known)
         held = {str(s.get("name", "")).lower(): s.get("symbol") for s in
                 ((self._profile() or {}).get("holdings") or {}).get("stocks", []) or []}
+        sym, problem = resolve(name, known, _priced())
         sym = sym or held.get(name.lower())
         if not sym:
-            return (f"Sorry, I don't know the company '{name}'. Please write its short NSE name, "
-                    f"like: bought 10 shares of TCS")
+            return problem.replace("like: TCS 10", "like: bought 10 shares of TCS")
         r, pname = self._result()
         px = next((x.get("price") for x in r.get("stocks", []) if x["symbol"] == sym), None)
         if not px:
@@ -148,13 +148,29 @@ class Bot:
         about = f" (about {friendly.money(px * q, cur)} at today's price)" if px and friendly.show_amounts() else ""
         return f"✅ Saved: you bought {q} shares of {label}{about}. I'll keep an eye on it for you."
 
+    def _remove(self, name: str) -> str:
+        """Take a wrongly typed share off the person's list (only from their own holdings, by exact name)."""
+        from .chat_onboard import save
+        p = self._profile()
+        if not p:
+            return "There's nothing to remove yet."
+        st = (p.get("holdings") or {}).get("stocks", []) or []
+        keep = [x for x in st if str(x.get("name", "")).strip().lower() != name.lower()]
+        if len(keep) == len(st):
+            names = ", ".join(str(x.get("name")) for x in st) or "none"
+            return f"I couldn't find '{name}' in your shares. Your shares are: {names}"
+        p["holdings"]["stocks"] = keep
+        save(self.profile_name, p)
+        return f"✅ Removed '{name}' from your shares."
+
     def _invested_stock(self, name: str, amount: float) -> str | None:
         from . import config
         from .ledger import add
-        from .names import to_symbol
-        sym, sure = to_symbol(name, (config.load("universe").get("stocks") or {}).get("india", []))
-        if not sym or not sure:
-            return None
+        from .chat_onboard import _priced
+        from .names import resolve
+        sym, problem = resolve(name, (config.load("universe").get("stocks") or {}).get("india", []), _priced())
+        if not sym:
+            return problem.replace("like: TCS 10", "like: invested 20000 TCS")
         if not 0 < amount <= 2_500_000:
             return "That amount looks unusual. Please check and type it again, or ask Soh."
         _, pname = self._result()
@@ -190,6 +206,8 @@ class Bot:
             return self._month(chat)
         if low.startswith("done "):
             return self._done(chat, low[5:].strip())
+        if low.startswith(("remove ", "delete ")):
+            return self._send(chat, {"text": self._remove(text.split(None, 1)[1].strip()), "buttons": []})
         try:
             got = self._bought(chat, text)
         except Exception as e:      # never stay silent

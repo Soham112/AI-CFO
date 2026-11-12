@@ -289,7 +289,7 @@ def test_chat_onboarding_creates_profile(monkeypatch, tmp_path):
     assert "set up" in bot.out[0][1]["text"]
     for v in ["Ramesh", "58", "1", "150000", "40000", "3", "3", "2", "1",
               "Parag Parikh Flexi Cap 500000 SIP 10000", "done", "1200000", "0",
-              "HDFC Bank 50", "TCS 10", "banana", "done", "1"]:
+              "HDFC Bank 50", "TCS 10", "Relaince 5", "banana", "done", "1"]:
         bot.on_text("111", v)
     assert (tmp_path / "newdad.yaml").exists(), [c["text"] for _, c in bot.out[-3:]]
     p = cfg.load_profile("newdad")
@@ -304,6 +304,10 @@ def test_name_to_symbol():
     assert to_symbol("hdfcbank", ["HDFCBANK.NS"]) == ("HDFCBANK.NS", True)
     assert to_symbol("IRCTC") == ("IRCTC.NS", False)
     assert to_symbol("some small company") == (None, False)
+    from dicfo.names import resolve
+    assert resolve("IRCTC", [], {"IRCTC.NS"}) == ("IRCTC.NS", "")
+    sym, msg = resolve("Relaince", ["RELIANCE.NS"])
+    assert sym is None and "Reliance" in msg
 
 
 def test_owned_shares_and_india_only():
@@ -347,5 +351,15 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     assert any(h["symbol"] == "TCS.NS" and h["shares"] == 10 for h in r["portfolio_review"]["holdings_check"])
     bot.on_text("111", "invested 20000 in Infosys")
     assert "Saved" in bot.out[-1][1]["text"] and ledger.load("t")[-1]["symbol"] == "INFY.NS"
+    n = len(ledger.load("t"))
+    bot.on_text("111", "bought 10 shares of TSC")             # typo: must not be saved
+    assert "didn't save" in bot.out[-1][1]["text"] and "TCS" in bot.out[-1][1]["text"]
+    assert len(ledger.load("t")) == n
+    p = cfg.load_profile("t")
+    p["holdings"]["stocks"] = [{"name": "Hadf bank", "symbol": None, "shares": 5}]
+    from dicfo.chat_onboard import save
+    save("t", p)
+    bot.on_text("111", "remove Hadf bank")
+    assert "Removed" in bot.out[-1][1]["text"] and cfg.load_profile("t")["holdings"]["stocks"] == []
     bot.on_text("111", "I bought something nice")
     assert "bought 10 shares of TCS" in bot.out[-1][1]["text"]

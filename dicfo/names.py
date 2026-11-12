@@ -42,3 +42,24 @@ def to_symbol(name: str, known: list[str] | None = None) -> tuple[str | None, bo
     if re.fullmatch(r"[A-Z0-9&-]{2,15}", key) and " " not in n:   # looks like a ticker someone typed (e.g. IRCTC)
         return key + ".NS", False
     return None, False
+
+
+def suggest(name: str, known: list[str] | None = None) -> str | None:
+    """Closest known company name, for 'Did you mean ...?'."""
+    import difflib
+    n = _SUFFIX.sub("", name.lower()).strip(" .")
+    pool = list(ALIASES) + [s.lower().removesuffix(".ns") for s in (known or [])]
+    hit = difflib.get_close_matches(n, pool, n=1, cutoff=0.6) or \
+        difflib.get_close_matches(n.replace(" ", ""), pool, n=1, cutoff=0.6)
+    return hit[0].upper() if hit and len(hit[0]) <= 5 else (hit[0].title() if hit else None)
+
+
+def resolve(name: str, known: list[str] | None = None, priced: set | None = None) -> tuple[str | None, str]:
+    """(symbol, '') only when we're sure it's a real company; else (None, a polite message asking to retype)."""
+    sym, sure = to_symbol(name, known)
+    if sym and (sure or sym in (priced or set())):
+        return sym, ""
+    s = suggest(name, known)
+    hint = f" Did you mean {s}?" if s else ""
+    return None, (f"I don't know a company called '{name.strip()}', so I didn't save it.{hint} "
+                  f"Please send it again with the right name, like: TCS 10")

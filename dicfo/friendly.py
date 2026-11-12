@@ -344,5 +344,7 @@ SIMPLE_HELP = ("I'm your Personal CFO. Every morning I send one message.\n\n"
                "• today: today's message again\n"
                "• month: this month's plan\n"
                "• done UTI Nifty: mark a SIP as paid\n"
-               "• invested 20000 TCS: note any other purchase\n\n"
+               "• bought 10 shares of TCS: note shares you bought\n"
+               "• invested 20000 TCS: note any other purchase\n"
+               "• remove <name>: take a wrongly typed share off your list\n\n"
                "Never send PAN, Aadhaar, bank numbers or passwords here.")
