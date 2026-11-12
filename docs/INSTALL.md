@@ -10,15 +10,15 @@ Everything runs on the laptop. No server, no cloud deploy. Personal data stays i
 2. Open PowerShell:
    ```powershell
    cd $HOME\Documents
-   git clone https://github.com/<your-username>/DICFO.git
-   cd DICFO
+   git clone https://github.com/Soham112/AI-CFO.git
+   cd AI-CFO
    python -m venv .venv
    .\.venv\Scripts\pip install -r requirements.txt
    ```
 
 **macOS / Linux**
 ```bash
-git clone https://github.com/<your-username>/DICFO.git && cd DICFO
+git clone https://github.com/Soham112/AI-CFO.git && cd AI-CFO
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 (Packages go only into `.venv`, never system-wide.)
