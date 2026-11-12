@@ -7,9 +7,20 @@ THEMATIC = ("sectoral", "thematic", "sector", "psu", "infra", "manufacturing", "
             "banking", "technology", "consumption", "esg", "energy")
 
 
-def current_mix(profile: dict, ledger: list[dict] | None = None) -> dict:
+def stock_value(st: dict, snap: dict | None) -> float | None:
+    px = ((snap or {}).get("markets", {}).get(st.get("symbol") or "") or {}).get("price")
+    if st.get("value") is not None:
+        return st["value"]
+    return px * st.get("shares", 0) if px else None
+
+
+def current_mix(profile: dict, ledger: list[dict] | None = None, snap: dict | None = None) -> dict:
     h = profile.get("holdings") or {}
     mix = Counter()
+    for st in h.get("stocks", []) or []:
+        v = stock_value(st, snap)
+        if v:
+            mix["us_equity" if st.get("symbol") and not str(st["symbol"]).endswith(".NS") else "india_equity"] += v
     for mf in h.get("mutual_funds", []) or []:
         cat = str(mf.get("category", "")).lower()
         if any(k in cat for k in ("debt", "liquid", "gilt", "money_market", "short_duration")):
@@ -29,8 +40,36 @@ def current_mix(profile: dict, ledger: list[dict] | None = None) -> dict:
     return dict(mix)
 
 
+def holdings_check(profile: dict, snap: dict, stocks: list[dict], total: float) -> list[dict]:
+    """One plain verdict per share the person owns directly."""
+    by_sym = {s["symbol"]: s for s in stocks}
+    out = []
+    for st in (profile.get("holdings") or {}).get("stocks", []) or []:
+        a, v = by_sym.get(st.get("symbol")), stock_value(st, snap)
+        row = {"name": st.get("name"), "symbol": st.get("symbol"), "shares": st.get("shares"),
+               "value": round(v) if v else None, "pct": round(v / total * 100, 1) if v and total else None}
+        if not a:
+            row["view"], row["say"] = "unknown", "no price yet, so I can't check it"
+        else:
+            off, q, tr = a.get("off_high_52w") or 0, a.get("quality") or 0, a.get("trend")
+            row["off_high"] = off
+            if q < 4 and tr == "downtrend":
+                row["view"], row["say"] = "weak", "the company looks weaker and the price keeps falling. Don't add more for now"
+            elif q >= 6 and off <= -0.15 and tr != "downtrend":
+                row["view"], row["say"] = "add", f"good company, now {abs(off) * 100:.0f}% cheaper than its best price this year. OK to add a little"
+            elif q >= 6 and off <= -0.15:
+                row["view"], row["say"] = "wait", f"good company, {abs(off) * 100:.0f}% below its best price but still falling. Wait before adding"
+            else:
+                row["view"], row["say"] = "hold", "looks fine, just hold"
+        if row["pct"] and row["pct"] > 10:
+            row["big"] = True
+            row["say"] += f". It is {row['pct']:.0f}% of all your money, which is a lot in one company"
+        out.append(row)
+    return out
+
+
 def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None = None,
-           benchmark_code: str = "120716") -> dict:
+           benchmark_code: str = "120716", stocks: list[dict] | None = None) -> dict:
     h = profile.get("holdings") or {}
     funds = h.get("mutual_funds", []) or []
     mf_data = snap.get("mutual_funds", {})
@@ -87,7 +126,7 @@ def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None 
             "See the tax flags. Do not add new money until you've confirmed your tax status.")
 
     # 5. Allocation gaps
-    mix = current_mix(profile, ledger)
+    mix = current_mix(profile, ledger, snap)
     total = sum(mix.values())
     gaps = {}
     if total:
@@ -104,4 +143,12 @@ def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None 
     if inc and sip_total / inc < 0.15 and profile.get("emergency_fund_have_months", 0) >= 6:
         add("low", f"SIPs are {sip_total / inc:.0%} of income",
             "With the emergency fund in place, 20-30% of income invested is a healthy target.")
-    return {"current_mix": mix, "total_value": total, "gaps": gaps, "sip_total": sip_total, "issues": issues}
+    held = holdings_check(profile, snap, stocks or [], total)
+    for h_ in held:
+        if h_.get("big"):
+            add("medium", f"{h_['name']} is {h_['pct']:.0f}% of everything you own",
+                "One company going wrong would hurt a lot. Don't add more; let new money go to funds instead.")
+        if h_.get("view") == "weak":
+            add("medium", f"{h_['name']}: weaker company, price still falling", "Stop adding to it and review whether to keep it.")
+    return {"current_mix": mix, "total_value": total, "gaps": gaps, "sip_total": sip_total, "issues": issues,
+            "holdings_check": held}

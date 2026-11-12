@@ -80,6 +80,9 @@ def target(profile: dict, scores: dict) -> dict:
         base["us_equity"] -= 12
         base["india_equity"] += 8
         base["india_fixed_income"] += 4
+    if profile.get("invest_abroad") == "no":      # India-only investor: no foreign shares at all
+        base["india_equity"] += base.get("us_equity", 0) + base.get("emerging_equity", 0)
+        base["us_equity"] = base["emerging_equity"] = 0
     tgt = {}
     for a, w in base.items():
         if w == 0:

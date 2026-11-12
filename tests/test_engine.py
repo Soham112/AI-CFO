@@ -288,8 +288,35 @@ def test_chat_onboarding_creates_profile(monkeypatch, tmp_path):
     bot.on_text("111", "hi")                                     # no profile -> setup starts
     assert "set up" in bot.out[0][1]["text"]
     for v in ["Ramesh", "58", "1", "150000", "40000", "3", "3", "2", "1",
-              "Parag Parikh Flexi Cap 500000 SIP 10000", "done", "1200000", "0", "0"]:
+              "Parag Parikh Flexi Cap 500000 SIP 10000", "done", "1200000", "0",
+              "HDFC Bank 50", "TCS 10", "banana", "done", "1"]:
         bot.on_text("111", v)
     assert (tmp_path / "newdad.yaml").exists(), [c["text"] for _, c in bot.out[-3:]]
     p = cfg.load_profile("newdad")
     assert p["language"] == "en" and p["employment"] == "salaried" and p["plan"]["core"][0]["monthly"] == 10000
+    assert [x["symbol"] for x in p["holdings"]["stocks"]] == ["HDFCBANK.NS", "TCS.NS"]
+    assert p["holdings"]["stocks"][0]["shares"] == 50 and p["invest_abroad"] == "no"
+
+
+def test_name_to_symbol():
+    from dicfo.names import to_symbol
+    assert to_symbol("Infosys Ltd") == ("INFY.NS", True)
+    assert to_symbol("hdfcbank", ["HDFCBANK.NS"]) == ("HDFCBANK.NS", True)
+    assert to_symbol("IRCTC") == ("IRCTC.NS", False)
+    assert to_symbol("some small company") == (None, False)
+
+
+def test_owned_shares_and_india_only():
+    from dicfo.data import snapshot as sm
+    from dicfo.friendly import simple_month
+    snap = sm.deep_merge(sm.load(FIX / "snapshot-2026-11-06.json"), sm.load(FIX / "overrides-2026-11-06-judgement.json"))
+    india_profile = config.load_profile("example-india-resident")
+    p = dict(india_profile, invest_abroad="no")
+    p["holdings"] = dict(p["holdings"], stocks=[{"name": "TCS", "symbol": "TCS.NS", "shares": 2000},
+                                                {"name": "Mystery", "symbol": None, "shares": 5}])
+    r = run(snap, p)
+    assert r["allocation"]["tactical"]["us_equity"] == 0
+    held = r["portfolio_review"]["holdings_check"]
+    assert held[0]["value"] and held[0]["view"] != "unknown" and held[1]["view"] == "unknown"
+    assert r["portfolio_review"]["current_mix"]["india_equity"] > india_profile["holdings"]["other"].get("india_equity", 0)
+    assert "Shares you own" in simple_month(r, p)

@@ -38,6 +38,16 @@ def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = Non
                 r["region"] = region
                 r["horizons"] = horizons.stock_views(r, m)
                 stocks.append(r)
+    seen = {r["symbol"] for r in stocks}
+    for st in (profile.get("holdings") or {}).get("stocks", []) or []:   # shares the person owns outside the watchlist
+        s = st.get("symbol")
+        f, m = snap.get("fundamentals", {}).get(s), mk.get(s)
+        if s and s not in seen and f and m:
+            r = analyse_stock(s, f, m, macro.get("india10y", 0.065) if str(s).endswith(".NS") else bond)
+            r["region"] = "india" if str(s).endswith(".NS") else "us"
+            r["horizons"] = horizons.stock_views(r, m)
+            stocks.append(r)
+            seen.add(s)
     stocks.sort(key=lambda r: r["composite"], reverse=True)
 
     monthly = profile.get("monthly_investable") or 0
@@ -56,7 +66,7 @@ def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = Non
         "horizon_views": views,
         "allocation": alloc,
         "monthly_split": monthly_split,
-        "portfolio_review": portfolio.review(profile, snap, tilt, ledger or []),
+        "portfolio_review": portfolio.review(profile, snap, tilt, ledger or [], stocks=stocks),
         "monthly_plan": plan_mod.review(profile, snap, ledger or []),
         "dip_plans": {"S&P 500": dip_ladder(mk.get(proxies["us_equity"], {})),
                       "Nifty 50": dip_ladder(mk.get(proxies["india_equity"], {}))},

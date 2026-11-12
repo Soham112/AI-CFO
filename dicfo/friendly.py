@@ -286,6 +286,13 @@ def simple_message(r: dict, profile: dict, today: dt.date | None = None, checkin
     L += todo or ["• Nothing new. Keep your monthly SIPs going. 👍"]
     L.append("")
 
+    held = [h for h in (r.get("portfolio_review") or {}).get("holdings_check", [])
+            if h.get("view") in ("add", "weak", "wait") or h.get("big")]
+    if held:
+        L.append("Your shares:")
+        L += [f"• {h['name']}: {h['say']}." for h in held]
+        L.append("")
+
     more = [PLAIN[a] for a, s in sc.items() if s["score"] >= 0.4 and r["allocation"]["tactical"].get(a)]
     slow = [PLAIN[a] for a, s in sc.items() if s["score"] <= -0.4 and r["allocation"]["tactical"].get(a)]
     if more:
@@ -318,6 +325,11 @@ def simple_month(r: dict, profile: dict) -> str:
     L = [f"Your plan for {label}:", "", "Monthly SIPs:"]
     L += [f"• {c['name']} {_amt(c['monthly'], cur)}: {'done ✅' if not c['pending'] else 'not done yet'}"
           for c in mp.get("core", [])]
+    held = (r.get("portfolio_review") or {}).get("holdings_check", [])
+    if held:
+        L += ["", "Shares you own:"]
+        L += [f"• {h['name']} ({h['shares']} shares{', ' + money(h['value'], cur) if h.get('value') and show_amounts() else ''}): {h['say']}."
+              for h in held]
     if mp.get("opportunistic"):
         L += ["", "Buy only when cheap:"]
         word = {"BUY": "cheap now, buy a part", "WAIT": "not cheap enough yet, wait", "DONE": "fully bought",

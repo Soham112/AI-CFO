@@ -146,12 +146,20 @@ def _main(argv=None):
     if a.cmd == "fetch" or (a.cmd == "daily" and not a.no_fetch and not a.snapshot):
         from .data.live import collect
         uni = config.load("universe")
-        # also fetch NAVs for every fund in every profile
-        for pth in config.PROFILES.glob("*.yaml"):
+        # also fetch NAVs / prices for every fund and share in every profile
+        names = {pth.name.split(".")[0] for pth in list(config.PROFILES.glob("*.yaml")) + list(config.PROFILES.glob("*.yaml.enc"))
+                 if not pth.name.split(".")[0].endswith("-ledger")}
+        for nm in sorted(names):
             try:
-                for f in (config.load_profile(pth.stem).get("holdings") or {}).get("mutual_funds", []) or []:
+                h = config.load_profile(nm).get("holdings") or {}
+                for f in h.get("mutual_funds", []) or []:
                     if f.get("scheme_code"):
                         uni.setdefault("mutual_funds", {})[str(f["scheme_code"])] = f.get("name", "")
+                for st in h.get("stocks", []) or []:
+                    sym = st.get("symbol")
+                    region = "india" if str(sym).endswith(".NS") else "us"
+                    if sym and sym not in uni["stocks"].setdefault(region, []):
+                        uni["stocks"][region].append(sym)
             except Exception:
                 pass
         snap = collect(uni)

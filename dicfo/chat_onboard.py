@@ -29,14 +29,19 @@ QUESTIONS = [
               "(name, current value, monthly SIP). Send done when finished.", None, "funds"),
     ("india_fixed_income", "Total in EPF + PPF + FDs + bonds? (number, 0 if none)", None, "money"),
     ("gold", "Gold you hold as ETF/SGB/coins (skip jewellery)? (number, 0 if none)", None, "money"),
-    ("india_equity", "Shares you hold directly (not through funds)? (number, 0 if none)", None, "money"),
+    ("stocks", "Now the shares you hold directly (not through mutual funds). Send one company per message with "
+               "the number of shares, like:\nHDFC Bank 50\nYour broker app (Zerodha, Groww, etc.) shows this. "
+               "Send done when finished, or done now if you have none.", None, "stocks"),
+    ("invest_abroad", "Do you want some money in companies outside India (like Google or Apple)?",
+     [("No, India only", "no"), ("Yes, a little, through Indian funds", "yes")], "choice"),
 ]
+STOCK_RX = re.compile(r"^(?P<name>.*?[A-Za-z].*?)\s+(?P<qty>[\d,]+)(?:\s*shares?)?\s*$", re.I)
 FUND_RX = re.compile(r"^(?P<name>.+?)\s+(?P<value>[\d,]+)(?:\s+sip\s+(?P<sip>[\d,]+))?\s*$", re.I)
 
 
 class Onboarding:
     def __init__(self):
-        self.i, self.ans, self.funds = 0, {}, []
+        self.i, self.ans, self.funds, self.stocks = 0, {}, [], []
 
     def current(self) -> dict:
         key, q, choices, kind = QUESTIONS[self.i]
@@ -76,6 +81,19 @@ class Onboarding:
                                    "plan": "regular" if "regular" in m["name"].lower() else "direct",
                                    "category": _guess_category(m["name"])})
                 return f"Added {m['name'].strip()} ✅ Send the next fund, or done."
+        elif kind == "stocks":
+            if v.lower() != "done":
+                m = STOCK_RX.match(v)
+                qty = int(m["qty"].replace(",", "")) if m else 0
+                if not m or not 0 < qty < 10_000_000:
+                    return "Please write the company name and number of shares, like: HDFC Bank 50"
+                from . import config
+                from .names import to_symbol
+                known = (config.load("universe").get("stocks") or {}).get("india", [])
+                sym, sure = to_symbol(m["name"], known)
+                self.stocks.append({"name": m["name"].strip(), "symbol": sym, "shares": qty})
+                note = "" if sure else " (I don't know this one yet, so I'll keep it but may not have its price)"
+                return f"Added {m['name'].strip()}, {qty} shares ✅{note} Send the next one, or done."
         self.i += 1
         return None
 
@@ -94,8 +112,9 @@ class Onboarding:
             "horizon_years": a.get("horizon_years"), "risk_tolerance": a.get("risk_tolerance"),
             "emergency_fund_months": 6, "emergency_fund_have_months": a.get("emergency_fund_have_months"),
             "tax": {"regime": a.get("tax_regime"), "india_slab": 0.3},
-            "holdings": {"mutual_funds": self.funds,
-                         "other": {k: a.get(k, 0) for k in ("india_fixed_income", "gold", "india_equity")}},
+            "invest_abroad": a.get("invest_abroad", "no"),
+            "holdings": {"mutual_funds": self.funds, "stocks": self.stocks,
+                         "other": {k: a.get(k, 0) for k in ("india_fixed_income", "gold")}},
             "plan": {"core": core, "opportunistic": [], "opportunistic_monthly_reserve": 0},
         }
 
