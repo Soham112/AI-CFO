@@ -320,3 +320,32 @@ def test_owned_shares_and_india_only():
     assert held[0]["value"] and held[0]["view"] != "unknown" and held[1]["view"] == "unknown"
     assert r["portfolio_review"]["current_mix"]["india_equity"] > india_profile["holdings"]["other"].get("india_equity", 0)
     assert "Shares you own" in simple_month(r, p)
+
+
+def test_bot_understands_bought_shares(monkeypatch, tmp_path):
+    from dicfo import config as cfg, ledger
+    from dicfo.data import snapshot as sm
+    from dicfo.telegram_listener import Bot, parse_bought
+    import dicfo.security as sec
+    assert parse_bought("I have bought 10 shares of tcs shares") == (10, "tcs")
+    assert parse_bought("bought 10 TCS") == (10, "TCS")
+    assert parse_bought("Bought HDFC Bank 50") == (50, "HDFC Bank")
+    assert parse_bought("hello") == (0, "")
+    monkeypatch.setattr(cfg, "PROFILES", tmp_path)
+    monkeypatch.setattr(ledger, "PROFILES", tmp_path)
+    monkeypatch.delenv("DICFO_KEY", raising=False)
+    monkeypatch.setattr(sec, "get_key", lambda: None)
+    (tmp_path / "t.yaml").write_text((cfg.ROOT / "profiles" / "example-india-resident.yaml").read_text())
+    snap = sm.deep_merge(sm.load(FIX / "snapshot-2026-11-06.json"), sm.load(FIX / "overrides-2026-11-06-judgement.json"))
+    bot = Bot("t", {"111"})
+    monkeypatch.setattr(bot.brain, "_result", lambda: (run(snap, cfg.load_profile("t"), ledger.load("t")), "t"))
+    bot.on_text("111", "I have bought 10 shares of tcs shares")
+    assert "Saved" in bot.out[-1][1]["text"] and "TCS" in bot.out[-1][1]["text"]
+    row = ledger.load("t")[-1]
+    assert row["symbol"] == "TCS.NS" and row["units"] == "10"
+    r = run(snap, cfg.load_profile("t"), ledger.load("t"))
+    assert any(h["symbol"] == "TCS.NS" and h["shares"] == 10 for h in r["portfolio_review"]["holdings_check"])
+    bot.on_text("111", "invested 20000 in Infosys")
+    assert "Saved" in bot.out[-1][1]["text"] and ledger.load("t")[-1]["symbol"] == "INFY.NS"
+    bot.on_text("111", "I bought something nice")
+    assert "bought 10 shares of TCS" in bot.out[-1][1]["text"]

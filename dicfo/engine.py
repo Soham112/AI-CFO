@@ -39,7 +39,8 @@ def run(snap: dict, profile: dict | None = None, ledger: list[dict] | None = Non
                 r["horizons"] = horizons.stock_views(r, m)
                 stocks.append(r)
     seen = {r["symbol"] for r in stocks}
-    for st in (profile.get("holdings") or {}).get("stocks", []) or []:   # shares the person owns outside the watchlist
+    from .analysis.portfolio import owned_stocks
+    for st in owned_stocks(profile, ledger):   # shares the person owns outside the watchlist
         s = st.get("symbol")
         f, m = snap.get("fundamentals", {}).get(s), mk.get(s)
         if s and s not in seen and f and m:

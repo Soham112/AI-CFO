@@ -50,6 +50,27 @@ def to_message(update: dict) -> dict | None:
             "event": "message", "date": m.get("date", 0)}
 
 
+BOUGHT_RX = [
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?:shares?|stocks?)\s+(?:of\s+|in\s+)?(?P<n>.+?)(?:\s+(?:shares?|stocks?))?\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?P<n>.+?)\s+(?:shares?|stocks?)\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<n>.+?)\s+(?P<q>[\d,]+)\s*(?:shares?|stocks?)?\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?P<n>[a-z&].*?)\s*[.!]*$", re.I),
+]
+
+
+def parse_bought(text: str) -> tuple[int, str]:
+    t = re.sub(r"\s+", " ", text.strip())
+    for rx in BOUGHT_RX:
+        m = rx.match(t)
+        if m:
+            q = int(m["q"].replace(",", ""))
+            n = re.sub(r"\b(shares?|stocks?|of|the)\b", " ", m["n"], flags=re.I)
+            n = re.sub(r"\s+", " ", n).strip(" .")
+            if 0 < q < 10_000_000 and n:
+                return q, n
+    return 0, ""
+
+
 class Bot:
     def __init__(self, profile_name: str | None, allowed: set[str], tok: str = ""):
         self.profile_name, self.allowed, self.tok = profile_name, allowed, tok
@@ -93,6 +114,54 @@ class Bot:
                     "note": note}])
         return friendly.t(lang, "recorded", name=item["name"], amt=friendly.money(amount, r.get("currency", "INR")))
 
+    def _bought(self, chat, text) -> str | None:
+        """Understand 'I bought 10 shares of TCS' / 'bought TCS 10 shares'. None if it isn't that."""
+        q, name = parse_bought(text)
+        if not q:
+            return None
+        from . import config
+        from .ledger import add
+        from .names import to_symbol
+        known = (config.load("universe").get("stocks") or {}).get("india", [])
+        sym, _ = to_symbol(name, known)
+        held = {str(s.get("name", "")).lower(): s.get("symbol") for s in
+                ((self._profile() or {}).get("holdings") or {}).get("stocks", []) or []}
+        sym = sym or held.get(name.lower())
+        if not sym:
+            return (f"Sorry, I don't know the company '{name}'. Please write its short NSE name, "
+                    f"like: bought 10 shares of TCS")
+        r, pname = self._result()
+        px = next((x.get("price") for x in r.get("stocks", []) if x["symbol"] == sym), None)
+        if not px:
+            from .data import snapshot as sm
+            lp = sm.latest()
+            px = ((sm.load(lp).get("markets", {}).get(sym) or {}).get("price")) if lp else None
+        label = sym.removesuffix(".NS")
+        row = {"symbol": sym, "name": label, "units": q, "asset_class": "india_equity" if sym.endswith(".NS") else "us_equity",
+               "note": "telegram"}
+        if px:
+            row.update(price=round(px, 2), amount=round(px * q))
+        else:
+            row.update(amount="")
+        add(pname, [row])
+        cur = r.get("currency", "INR")
+        about = f" (about {friendly.money(px * q, cur)} at today's price)" if px and friendly.show_amounts() else ""
+        return f"✅ Saved: you bought {q} shares of {label}{about}. I'll keep an eye on it for you."
+
+    def _invested_stock(self, name: str, amount: float) -> str | None:
+        from . import config
+        from .ledger import add
+        from .names import to_symbol
+        sym, sure = to_symbol(name, (config.load("universe").get("stocks") or {}).get("india", []))
+        if not sym or not sure:
+            return None
+        if not 0 < amount <= 2_500_000:
+            return "That amount looks unusual. Please check and type it again, or ask Soh."
+        _, pname = self._result()
+        label = sym.removesuffix(".NS")
+        add(pname, [{"symbol": sym, "name": label, "amount": round(amount), "asset_class": "india_equity", "note": "telegram"}])
+        return f"✅ Saved: {friendly.money(amount, 'INR')} in {label}. Thank you!"
+
     # ---------- entry points ----------
     def on_text(self, chat: str, text: str, update_id=None):
         if chat not in self.allowed:
@@ -121,8 +190,24 @@ class Bot:
             return self._month(chat)
         if low.startswith("done "):
             return self._done(chat, low[5:].strip())
+        try:
+            got = self._bought(chat, text)
+        except Exception as e:      # never stay silent
+            got = f"Sorry, I couldn't save that ({type(e).__name__}). Please tell Soh."
+        if got:
+            return self._send(chat, {"text": got, "buttons": []})
         reply = self.brain.handle({"id": f"tg{update_id}", "sender": chat, "chat": chat, "text": text,
                                    "event": "message"})
+        if reply and "couldn't match" in reply:          # not in the plan: maybe a share he owns or a Nifty 50 company
+            mt = re.match(r"\s*invested\s+([\d,]+)\s*(?:rs\.?|inr|₹)?\s+(?:in\s+)?(.+)$", text, re.I)
+            if mt:
+                try:
+                    reply = self._invested_stock(mt.group(2).strip(), float(mt.group(1).replace(",", ""))) or reply
+                except Exception as e:
+                    reply = f"Sorry, I couldn't save that ({type(e).__name__}). Please tell Soh."
+        if not reply and re.search(r"\b(bought|buy|purchased|invested|sold)\b", low):
+            reply = ("I didn't understand that. Please write it like:\nbought 10 shares of TCS\n"
+                     "or: invested 20000 UTI Nifty")
         self._send(chat, {"text": _esc(reply) if reply else _esc(friendly.SIMPLE_HELP), "buttons": []})
 
     def on_button(self, chat: str, data: str) -> str:

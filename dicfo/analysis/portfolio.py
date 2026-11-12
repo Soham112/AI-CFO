@@ -40,11 +40,35 @@ def current_mix(profile: dict, ledger: list[dict] | None = None, snap: dict | No
     return dict(mix)
 
 
-def holdings_check(profile: dict, snap: dict, stocks: list[dict], total: float) -> list[dict]:
+def owned_stocks(profile: dict, ledger: list[dict] | None = None) -> list[dict]:
+    """Shares from the profile plus share purchases recorded later (e.g. 'bought 10 shares of TCS')."""
+    own = [dict(s) for s in (profile.get("holdings") or {}).get("stocks", []) or []]
+    by = {s.get("symbol"): s for s in own if s.get("symbol")}
+    for r in ledger or []:
+        try:
+            units = float(r.get("units") or 0)
+        except ValueError:
+            units = 0
+        sym = r.get("symbol")
+        if not units or not sym or r.get("asset_class") not in ("india_equity", "us_equity"):
+            continue
+        if sym in by:
+            by[sym]["shares"] = (by[sym].get("shares") or 0) + units
+        else:
+            by[sym] = {"name": r.get("name") or sym, "symbol": sym, "shares": units}
+            own.append(by[sym])
+    for s in own:
+        if isinstance(s.get("shares"), float) and s["shares"].is_integer():
+            s["shares"] = int(s["shares"])
+    return own
+
+
+def holdings_check(profile: dict, snap: dict, stocks: list[dict], total: float,
+                   ledger: list[dict] | None = None) -> list[dict]:
     """One plain verdict per share the person owns directly."""
     by_sym = {s["symbol"]: s for s in stocks}
     out = []
-    for st in (profile.get("holdings") or {}).get("stocks", []) or []:
+    for st in owned_stocks(profile, ledger):
         a, v = by_sym.get(st.get("symbol")), stock_value(st, snap)
         row = {"name": st.get("name"), "symbol": st.get("symbol"), "shares": st.get("shares"),
                "value": round(v) if v else None, "pct": round(v / total * 100, 1) if v and total else None}
@@ -143,7 +167,7 @@ def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None 
     if inc and sip_total / inc < 0.15 and profile.get("emergency_fund_have_months", 0) >= 6:
         add("low", f"SIPs are {sip_total / inc:.0%} of income",
             "With the emergency fund in place, 20-30% of income invested is a healthy target.")
-    held = holdings_check(profile, snap, stocks or [], total)
+    held = holdings_check(profile, snap, stocks or [], total, ledger)
     for h_ in held:
         if h_.get("big"):
             add("medium", f"{h_['name']} is {h_['pct']:.0f}% of everything you own",
