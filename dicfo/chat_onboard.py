@@ -27,13 +27,17 @@ QUESTIONS = [
     ("tax_regime", "Which income-tax regime do you use?", [("New", "new"), ("Old", "old"), ("Not sure", "new")], "choice"),
     ("funds", "Now your mutual funds. Send one per message like:\nParag Parikh Flexi Cap 500000 invested 380000 SIP 10000\n"
               "(name, value today, total money you put in, monthly SIP). Your fund app shows 'Current' and "
-              "'Invested'. Leave out SIP if there is none. Send done when finished.", None, "funds"),
+              "'Invested'. Leave out SIP if there is none. Send done when finished.\n"
+              "Lots of funds? Send the ones with a SIP now; after setup you can send me the holdings file from your fund app.",
+     None, "funds"),
     ("india_fixed_income", "Total in EPF + PPF + FDs + bonds? (number, 0 if none)", None, "money"),
     ("gold", "Gold you hold as ETF/SGB/coins (skip jewellery)? (number, 0 if none)", None, "money"),
     ("stocks", "Now the shares you hold directly (not through mutual funds). Send one company per message with "
                "the number of shares and the average price you paid, like:\nHDFC Bank 50 at 1450\n"
                "Your broker app (Zerodha, Groww, etc.) shows this as 'Avg. price'. "
-               "Send done when finished, or done now if you have none.", None, "stocks"),
+               "Send done when finished, or done now if you have none.\n"
+               "Lots of shares? Send done now, and after setup just send me the Holdings file from your broker app.",
+     None, "stocks"),
     ("invest_abroad", "Do you want some money in companies outside India (like Google or Apple)?",
      [("No, India only", "no"), ("Yes, a little, through Indian funds", "yes")], "choice"),
 ]
@@ -56,6 +60,12 @@ class Onboarding:
     def answer(self, value: str) -> str | None:
         """Return an error message, or None if accepted (then call current() / finished())."""
         key, _, choices, kind = QUESTIONS[self.i]
+        lines = [x for x in str(value).splitlines() if x.strip()]
+        if kind in ("funds", "stocks") and len(lines) > 1:          # several pasted in one message
+            msgs = [self.answer(x) for x in lines]
+            if self.i < len(QUESTIONS) and QUESTIONS[self.i][0] != key:
+                return None                                          # a 'done' line moved us on
+            return "\n".join(m for m in msgs if m)
         v = value.strip()
         if kind == "choice":
             vals = {str(n): c[1] for n, c in enumerate(choices, 1)}

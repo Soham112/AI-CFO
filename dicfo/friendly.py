@@ -348,6 +348,7 @@ SIMPLE_HELP = ("I'm your Personal CFO. Every morning I send one message.\n\n"
                "• profit: how much you put in, what it's worth now\n"
                "• invested 20000 TCS: note any other purchase\n"
                "• holdings: see everything I have saved\n"
+               "• send your broker's Holdings file (Excel/CSV) to update all shares or funds at once\n"
                "• remove <name>: take a wrong share or fund off your list\n"
                "• /setup: enter everything again from the start\n\n"
                "Never send PAN, Aadhaar, bank numbers or passwords here.")

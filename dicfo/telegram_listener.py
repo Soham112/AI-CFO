@@ -9,6 +9,7 @@ Env:  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (comma list), optional TELEGRAM_DETAI
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -91,6 +92,7 @@ class Bot:
         self.awaiting_amount: dict[str, str] = {}      # chat -> symbol
         self.onboarding: dict = {}                    # chat -> Onboarding
         self.out: list[tuple[str, dict]] = []         # (chat, card) when no token (tests)
+        self.pending_import: dict = {}                # chat -> parts waiting for "yes"
 
     # ---------- helpers ----------
     def _send(self, chat, card):
@@ -174,6 +176,85 @@ class Bot:
         if q < 0:
             return f"✅ Saved: you sold {-q} shares of {label}{about}."
         return f"✅ Saved: you bought {q} shares of {label}{about}. I'll keep an eye on it for you."
+
+    def on_document(self, chat: str, filename: str, data: bytes):
+        """A holdings file from the broker / fund app: read it, show a short check, save only after 'yes'."""
+        if chat not in self.allowed:
+            return
+        from . import config
+        from .chat_onboard import _guess_category, _priced
+        from .holdings_import import parse, to_profile_parts
+        from .security import scan
+        if self._profile() is None:
+            return self._send(chat, {"text": "Please finish /setup first, then send the file again.", "buttons": []})
+        try:
+            parts = to_profile_parts(parse(data, filename),
+                                     (config.load("universe").get("stocks") or {}).get("india", []), _priced())
+        except ValueError as e:
+            return self._send(chat, {"text": str(e), "buttons": []})
+        for f in parts["funds"]:
+            f["category"] = _guess_category(f["name"])
+        if scan({"s": [x["name"] for x in parts["stocks"] + parts["funds"]]}):
+            return self._send(chat, {"text": "That file seems to contain an ID or account number in a name column, "
+                                              "so I didn't read it.", "buttons": []})
+        self.pending_import[chat] = parts
+        cur = (self._profile() or {}).get("base_currency", "INR")
+        m = lambda x: friendly.money(round(x), cur)
+        L = ["I read your file. Please check:"]
+        for label, rows in (("shares", parts["stocks"]), ("mutual funds", parts["funds"])):
+            if not rows:
+                continue
+            inv = sum((r.get("avg_price") or 0) * r.get("shares", 0) for r in rows) if label == "shares" else \
+                sum(r.get("invested") or 0 for r in rows)
+            L += ["", f"{len(rows)} {label}:"]
+            L += [f"• {r['name']}: " + (f"{r['shares']} shares" + (f" at {m(r['avg_price'])}" if r.get("avg_price") else "")
+                                        if label == "shares" else
+                                        (f"put in {m(r['invested'])}, " if r.get("invested") else "") + f"now {m(r['value'])}")
+                  for r in rows[:40]]
+            if len(rows) > 40:
+                L.append(f"…and {len(rows) - 40} more")
+            if inv:
+                L.append(f"Total put in: {m(inv)}")
+        if parts["unmatched"]:
+            L += ["", "I don't have daily prices for: " + ", ".join(parts["unmatched"][:10])
+                  + ". I'll keep them at the value in your file."]
+        which = " and ".join(w for w, rows in (("shares", parts["stocks"]), ("funds", parts["funds"])) if rows)
+        L += ["", f"Reply yes to save. This replaces the {which} I had before. Reply no to cancel."]
+        self._send(chat, {"text": "\n".join(L), "buttons": []})
+
+    def _save_import(self, parts: dict) -> str:
+        from .chat_onboard import save
+        from .config import profile_path
+        from .ledger import load, path as lpath
+        from .security import write_private
+        p = self._profile()
+        if not p:
+            return "Please finish /setup first."
+        h = p.setdefault("holdings", {})
+        if parts["stocks"]:
+            h["stocks"] = parts["stocks"]
+        if parts["funds"]:
+            old = {str(f.get("name", "")).lower(): f for f in h.get("mutual_funds", []) or []}
+            for f in parts["funds"]:          # keep the SIP amount he already told us
+                prev = next((o for k, o in old.items() if k and (k in f["name"].lower() or f["name"].lower() in k)), None)
+                if prev:
+                    f["sip_monthly"] = prev.get("sip_monthly", 0)
+                    if prev.get("scheme_code"):
+                        f["scheme_code"] = prev["scheme_code"]
+            h["mutual_funds"] = parts["funds"]
+        name = profile_path(self.profile_name).stem
+        save(name, p)
+        if parts["stocks"]:                   # the file is the full picture: old bought/sold notes would double count
+            keep = [r for r in load(name) if not (r.get("units") and r.get("asset_class") in ("india_equity", "us_equity"))]
+            import csv as _csv
+            from .ledger import FIELDS
+            buf = io.StringIO()
+            w = _csv.DictWriter(buf, fieldnames=FIELDS)
+            w.writeheader()
+            for r in keep:
+                w.writerow({k: r.get(k, "") for k in FIELDS})
+            write_private(lpath(name), buf.getvalue().encode())
+        return "✅ Saved. Send profit to see how your investments are doing, or holdings to see the list."
 
     def _profit(self) -> str:
         """Asked-for only (never in the daily push): invested vs worth now."""
@@ -279,6 +360,12 @@ class Bot:
         low = text.strip().lower()
         if chat in self.onboarding:
             return self._onboard_answer(chat, text)
+        if chat in self.pending_import:
+            parts = self.pending_import.pop(chat)
+            if low in ("yes", "y", "ok", "save", "haan", "ha"):
+                return self._send(chat, {"text": self._save_import(parts), "buttons": []})
+            if low in ("no", "n", "cancel"):
+                return self._send(chat, {"text": "OK, I didn't save anything.", "buttons": []})
         if chat in self.awaiting_amount:
             n = low.replace(",", "").replace("₹", "").replace("rs", "").strip()
             if n.replace(".", "", 1).isdigit():
@@ -459,6 +546,17 @@ def listen(profile: str | None, once: bool = False):
                         if chat in bot.allowed:   # remove buttons so a tap can't be repeated
                             _call(tok, "editMessageReplyMarkup", chat_id=chat, message_id=cq["message"]["message_id"],
                                   reply_markup=json.dumps({"inline_keyboard": []}))
+                        continue
+                    msg = u.get("message") or {}
+                    if msg.get("document") and msg.get("date", 0) >= started - 60:
+                        chat, d = str(msg["chat"]["id"]), msg["document"]
+                        if chat in bot.allowed:
+                            if (d.get("file_size") or 0) > 2_000_000:
+                                send_card(tok, chat, {"text": "That file is too big. Please send only the holdings download."})
+                                continue
+                            fp = _call(tok, "getFile", file_id=d["file_id"])["result"]["file_path"]
+                            data = requests.get(f"https://api.telegram.org/file/bot{tok}/{fp}", timeout=60).content
+                            bot.on_document(chat, d.get("file_name") or fp, data)   # read in memory, never written to disk
                         continue
                     m = to_message(u)
                     if not m or m["date"] < started - 60:

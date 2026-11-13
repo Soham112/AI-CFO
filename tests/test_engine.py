@@ -383,3 +383,63 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     assert "Nothing was changed" in bot.out[-1][1]["text"] and ledger.load("t")
     bot.on_text("111", "I bought something nice")
     assert "bought 10 shares of TCS" in bot.out[-1][1]["text"]
+
+
+def _xlsx(rows):
+    import io, openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def test_holdings_file_import(monkeypatch, tmp_path):
+    from dicfo import config as cfg, ledger
+    from dicfo.holdings_import import parse, to_profile_parts
+    from dicfo.telegram_listener import Bot
+    import dicfo.security as sec
+    zerodha = _xlsx([["Client ID", "AB1234"], [], ["Symbol", "ISIN", "Sector", "Quantity Available", "Quantity Long Term",
+                     "Average Price", "Previous Closing Price"],
+                     ["HDFCBANK", "INE040A01034", "Banks", 50, 50, 1450.5, 1600],
+                     ["TCS", "INE467B01029", "IT", 10, 0, 3100, 3300]])
+    groww_csv = ("Stock Name,ISIN,Quantity,Average buy price,Buy value,Closing price,Closing value\n"
+                 "HDFC BANK LTD,INE040A01034,50,1450,72500,1600,80000\n"
+                 "SOME SMALL CO LTD,INE000000000,7,100,700,120,840\n").encode()
+    groww_mf = ("Scheme Name,AMC,Category,Folio No.,Units,Invested Value,Current Value\n"
+                "Parag Parikh Flexi Cap Fund Direct Growth,PPFAS,Equity,12345678,1000.5,380000,500000\n").encode()
+    z = to_profile_parts(parse(zerodha, "holdings.xlsx"), ["HDFCBANK.NS", "TCS.NS"], set())
+    assert [(s["symbol"], s["shares"], s["avg_price"]) for s in z["stocks"]] == [("HDFCBANK.NS", 50, 1450.5), ("TCS.NS", 10, 3100)]
+    g = to_profile_parts(parse(groww_csv, "h.csv"), ["HDFCBANK.NS"], set())
+    assert g["stocks"][0]["symbol"] == "HDFCBANK.NS" and g["stocks"][1]["symbol"] is None and g["stocks"][1]["value"] == 840
+    f = to_profile_parts(parse(groww_mf, "mf.csv"), [], set())["funds"][0]
+    assert f["invested"] == 380000 and f["value"] == 500000 and "12345678" not in str(f)
+    try:
+        parse(b"%PDF-1.4 ...", "x.pdf")
+        assert False
+    except ValueError as e:
+        assert "PDF" in str(e)
+    # through the bot: preview, then yes
+    monkeypatch.setattr(cfg, "PROFILES", tmp_path)
+    monkeypatch.setattr(ledger, "PROFILES", tmp_path)
+    monkeypatch.delenv("DICFO_KEY", raising=False)
+    monkeypatch.setattr(sec, "get_key", lambda: None)
+    (tmp_path / "t.yaml").write_text((cfg.ROOT / "profiles" / "example-india-resident.yaml").read_text())
+    bot = Bot("t", {"111"})
+    bot.on_document("111", "holdings.xlsx", zerodha)
+    assert "Reply yes" in bot.out[-1][1]["text"] and "2 shares" in bot.out[-1][1]["text"]
+    assert "AB1234" not in bot.out[-1][1]["text"]
+    bot.on_text("111", "yes")
+    assert "Saved" in bot.out[-1][1]["text"]
+    st = cfg.load_profile("t")["holdings"]["stocks"]
+    assert len(st) == 2 and "AB1234" not in str(cfg.load_profile("t"))
+
+
+def test_setup_accepts_many_lines():
+    from dicfo.chat_onboard import Onboarding, QUESTIONS
+    ob = Onboarding()
+    ob.i = [q[0] for q in QUESTIONS].index("stocks")
+    ob.answer("TCS 10 at 3100\nHDFC Bank 50 at 1450\nINFY 5")
+    assert [s["symbol"] for s in ob.stocks] == ["TCS.NS", "HDFCBANK.NS", "INFY.NS"]
