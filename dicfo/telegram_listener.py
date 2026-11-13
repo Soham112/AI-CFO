@@ -312,6 +312,31 @@ class Bot:
               "To enter everything again from the start: /setup"]
         return "\n".join(L)
 
+    def _add_fund(self, text: str) -> str:
+        """'Parag Parikh Flexi Cap 500000 invested 380000 SIP 10000' outside /setup: add or update that fund."""
+        from .chat_onboard import FUND_RX, _guess_category, save
+        p = self._profile()
+        if not p:
+            return "Please send /setup first."
+        m = FUND_RX.match(re.sub(r"^add (fund\s+)?", "", text.strip(), flags=re.I))
+        if not m:
+            return "Please write it like: Parag Parikh Flexi Cap 500000 invested 380000 SIP 10000"
+        name = m["name"].strip()
+        f = {"name": name, "value": int(m["value"].replace(",", "")),
+             "invested": int(m["inv"].replace(",", "")) if m["inv"] else None,
+             "sip_monthly": int((m["sip"] or "0").replace(",", "")),
+             "plan": "regular" if "regular" in name.lower() else "direct", "category": _guess_category(name)}
+        h = p.setdefault("holdings", {})
+        funds = [x for x in h.get("mutual_funds", []) or [] if str(x.get("name", "")).lower() != name.lower()]
+        updated = len(funds) != len(h.get("mutual_funds", []) or [])
+        h["mutual_funds"] = funds + [f]
+        core = [c for c in (p.setdefault("plan", {}).get("core") or []) if str(c.get("name", "")).lower() != name.lower()]
+        if f["sip_monthly"]:
+            core.append({"symbol": name, "type": "mf", "name": name, "monthly": f["sip_monthly"]})
+        p["plan"]["core"] = core
+        save(self.profile_name, p)
+        return f"✅ {'Updated' if updated else 'Added'} {name}. Send the next fund the same way, or holdings to check."
+
     def _remove(self, name: str) -> str:
         """Take a wrongly typed share or fund off the person's list (by exact name, own holdings only)."""
         from .chat_onboard import save
@@ -387,6 +412,8 @@ class Bot:
             return self._send(chat, {"text": self._profit(), "buttons": []})
         if low in ("holdings", "my holdings", "portfolio", "/holdings"):
             return self._send(chat, {"text": self._holdings(), "buttons": []})
+        if re.search(r"\s(invested|sip)\s+[\d,]+", low) and not low.startswith(("invested", "bought", "sold")):
+            return self._send(chat, {"text": self._add_fund(text), "buttons": []})
         if low.startswith(("remove ", "delete ")):
             return self._send(chat, {"text": self._remove(text.split(None, 1)[1].strip()), "buttons": []})
         try:

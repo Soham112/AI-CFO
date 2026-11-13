@@ -377,6 +377,11 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     assert "Shares:" in bot.out[-1][1]["text"] and "TCS" in bot.out[-1][1]["text"]
     bot.on_text("111", "remove Parag Parikh Flexi Cap Fund - Direct Growth")
     assert "funds" in bot.out[-1][1]["text"]
+    bot.on_text("111", "HDFC Mid Cap 200000 invested 150000 SIP 5000")
+    assert "Added HDFC Mid Cap" in bot.out[-1][1]["text"]
+    pf = cfg.load_profile("t")
+    assert any(f["name"] == "HDFC Mid Cap" and f["invested"] == 150000 for f in pf["holdings"]["mutual_funds"])
+    assert any(c["name"] == "HDFC Mid Cap" and c["monthly"] == 5000 for c in pf["plan"]["core"])
     bot.on_text("111", "/setup")
     assert "replaces everything" in bot.out[-2][1]["text"]
     bot.on_text("111", "cancel")
