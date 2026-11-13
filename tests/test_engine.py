@@ -412,6 +412,10 @@ def test_holdings_file_import(monkeypatch, tmp_path):
                 "Parag Parikh Flexi Cap Fund Direct Growth,PPFAS,Equity,12345678,1000.5,380000,500000\n").encode()
     z = to_profile_parts(parse(zerodha, "holdings.xlsx"), ["HDFCBANK.NS", "TCS.NS"], set())
     assert [(s["symbol"], s["shares"], s["avg_price"]) for s in z["stocks"]] == [("HDFCBANK.NS", 50, 1450.5), ("TCS.NS", 10, 3100)]
+    coin = _xlsx([["Symbol", "ISIN", "Quantity Available", "Average Price"],
+                  ["PARAG PARIKH FLEXI CAP FUND - DIRECT PLAN", "INF879O01027", 1000.5, 80]])
+    cz = to_profile_parts(parse(coin, "mf.xlsx"), [], set())
+    assert not cz["stocks"] and cz["funds"][0]["invested"] == 80040
     g = to_profile_parts(parse(groww_csv, "h.csv"), ["HDFCBANK.NS"], set())
     assert g["stocks"][0]["symbol"] == "HDFCBANK.NS" and g["stocks"][1]["symbol"] is None and g["stocks"][1]["value"] == 840
     f = to_profile_parts(parse(groww_mf, "mf.csv"), [], set())["funds"][0]

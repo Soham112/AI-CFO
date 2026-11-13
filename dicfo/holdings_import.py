@@ -90,7 +90,10 @@ def parse(data: bytes, filename: str) -> dict:
                    "current": _num(r[cur]) if cur is not None else None}
             if row["invested"] is None and row["avg"]:
                 row["invested"] = row["avg"] * qty
-            (funds if is_fund else stocks).append(row)
+            fundish = is_fund or re.search(r"\b(fund|scheme|direct plan|regular plan|growth|idcw|etf fof)\b", name, re.I)
+            if fundish and not row["current"] and row["avg"]:
+                row["current"] = None            # value comes from NAV later; keep invested
+            (funds if fundish else stocks).append(row)
     if not stocks and not funds:
         raise ValueError("I couldn't find a holdings table in that file. Please send the 'Holdings' download "
                          "from your broker or fund app.")
@@ -112,7 +115,7 @@ def to_profile_parts(parsed: dict, known: list[str], priced: set) -> dict:
             st["value"] = r["current"]
             unmatched.append(r["name"])
         stocks.append(st)
-    funds = [{"name": r["name"], "value": round(r["current"] or 0), "invested": round(r["invested"]) if r["invested"] else None,
+    funds = [{"name": r["name"], "value": round(r["current"] or r["invested"] or 0), "invested": round(r["invested"]) if r["invested"] else None,
               "units": r["qty"], "sip_monthly": 0, "plan": "regular" if "regular" in r["name"].lower() else "direct"}
              for r in parsed["funds"]]
     return {"stocks": stocks, "funds": funds, "unmatched": unmatched}
