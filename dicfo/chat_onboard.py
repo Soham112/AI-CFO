@@ -25,18 +25,22 @@ QUESTIONS = [
      [("Sell to stop losses", "conservative"), ("Wait it out", "moderate"),
       ("Buy a little more", "moderately_aggressive"), ("Buy a lot more", "aggressive")], "choice"),
     ("tax_regime", "Which income-tax regime do you use?", [("New", "new"), ("Old", "old"), ("Not sure", "new")], "choice"),
-    ("funds", "Now your mutual funds. Send one per message like:\nParag Parikh Flexi Cap 500000 SIP 10000\n"
-              "(name, current value, monthly SIP). Send done when finished.", None, "funds"),
+    ("funds", "Now your mutual funds. Send one per message like:\nParag Parikh Flexi Cap 500000 invested 380000 SIP 10000\n"
+              "(name, value today, total money you put in, monthly SIP). Your fund app shows 'Current' and "
+              "'Invested'. Leave out SIP if there is none. Send done when finished.", None, "funds"),
     ("india_fixed_income", "Total in EPF + PPF + FDs + bonds? (number, 0 if none)", None, "money"),
     ("gold", "Gold you hold as ETF/SGB/coins (skip jewellery)? (number, 0 if none)", None, "money"),
     ("stocks", "Now the shares you hold directly (not through mutual funds). Send one company per message with "
-               "the number of shares, like:\nHDFC Bank 50\nYour broker app (Zerodha, Groww, etc.) shows this. "
+               "the number of shares and the average price you paid, like:\nHDFC Bank 50 at 1450\n"
+               "Your broker app (Zerodha, Groww, etc.) shows this as 'Avg. price'. "
                "Send done when finished, or done now if you have none.", None, "stocks"),
     ("invest_abroad", "Do you want some money in companies outside India (like Google or Apple)?",
      [("No, India only", "no"), ("Yes, a little, through Indian funds", "yes")], "choice"),
 ]
-STOCK_RX = re.compile(r"^(?P<name>.*?[A-Za-z].*?)\s+(?P<qty>[\d,]+)(?:\s*shares?)?\s*$", re.I)
-FUND_RX = re.compile(r"^(?P<name>.+?)\s+(?P<value>[\d,]+)(?:\s+sip\s+(?P<sip>[\d,]+))?\s*$", re.I)
+STOCK_RX = re.compile(r"^(?P<name>.*?[A-Za-z].*?)\s+(?P<qty>[\d,]+)(?:\s*shares?)?"
+                      r"(?:\s+(?:at|@)\s*(?:rs\.?|₹)?\s*(?P<px>[\d,]+(?:\.\d+)?))?\s*$", re.I)
+FUND_RX = re.compile(r"^(?P<name>.+?)\s+(?P<value>[\d,]+)(?:\s+invested\s+(?P<inv>[\d,]+))?"
+                     r"(?:\s+sip\s+(?P<sip>[\d,]+))?\s*$", re.I)
 
 
 class Onboarding:
@@ -75,8 +79,9 @@ class Onboarding:
             if v.lower() != "done":
                 m = FUND_RX.match(v)
                 if not m:
-                    return "Please write it like: UTI Nifty 50 Index 300000 SIP 10000"
+                    return "Please write it like: UTI Nifty 50 Index 300000 invested 250000 SIP 10000"
                 self.funds.append({"name": m["name"].strip(), "value": int(m["value"].replace(",", "")),
+                                   "invested": int(m["inv"].replace(",", "")) if m["inv"] else None,
                                    "sip_monthly": int((m["sip"] or "0").replace(",", "")),
                                    "plan": "regular" if "regular" in m["name"].lower() else "direct",
                                    "category": _guess_category(m["name"])})
@@ -86,14 +91,15 @@ class Onboarding:
                 m = STOCK_RX.match(v)
                 qty = int(m["qty"].replace(",", "")) if m else 0
                 if not m or not 0 < qty < 10_000_000:
-                    return "Please write the company name and number of shares, like: HDFC Bank 50"
+                    return "Please write the company name, number of shares and price paid, like: HDFC Bank 50 at 1450"
                 from . import config
                 from .names import resolve
                 known = (config.load("universe").get("stocks") or {}).get("india", [])
                 sym, problem = resolve(m["name"], known, _priced())
                 if problem:
-                    return problem.replace("like: TCS 10", "like: HDFC Bank 50")
-                self.stocks.append({"name": m["name"].strip(), "symbol": sym, "shares": qty})
+                    return problem.replace("like: TCS 10", "like: HDFC Bank 50 at 1450")
+                px = float(m["px"].replace(",", "")) if m["px"] else None
+                self.stocks.append({"name": m["name"].strip(), "symbol": sym, "shares": qty, "avg_price": px})
                 return f"Added {m['name'].strip()}, {qty} shares ✅ Send the next one, or done."
         self.i += 1
         return None

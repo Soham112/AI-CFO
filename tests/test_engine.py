@@ -289,13 +289,14 @@ def test_chat_onboarding_creates_profile(monkeypatch, tmp_path):
     assert "set up" in bot.out[0][1]["text"]
     for v in ["Ramesh", "58", "1", "150000", "40000", "3", "3", "2", "1",
               "Parag Parikh Flexi Cap 500000 SIP 10000", "done", "1200000", "0",
-              "HDFC Bank 50", "TCS 10", "Relaince 5", "banana", "done", "1"]:
+              "HDFC Bank 50 at 1450", "TCS 10", "Relaince 5", "banana", "done", "1"]:
         bot.on_text("111", v)
     assert (tmp_path / "newdad.yaml").exists(), [c["text"] for _, c in bot.out[-3:]]
     p = cfg.load_profile("newdad")
     assert p["language"] == "en" and p["employment"] == "salaried" and p["plan"]["core"][0]["monthly"] == 10000
     assert [x["symbol"] for x in p["holdings"]["stocks"]] == ["HDFCBANK.NS", "TCS.NS"]
     assert p["holdings"]["stocks"][0]["shares"] == 50 and p["invest_abroad"] == "no"
+    assert p["holdings"]["stocks"][0]["avg_price"] == 1450 and p["holdings"]["stocks"][1]["avg_price"] is None
 
 
 def test_name_to_symbol():
@@ -351,6 +352,11 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     assert any(h["symbol"] == "TCS.NS" and h["shares"] == 10 for h in r["portfolio_review"]["holdings_check"])
     bot.on_text("111", "invested 20000 in Infosys")
     assert "Saved" in bot.out[-1][1]["text"] and ledger.load("t")[-1]["symbol"] == "INFY.NS"
+    bot.on_text("111", "bought 10 TCS at 2000")
+    assert "at ₹2,000 each" in bot.out[-1][1]["text"] or "Saved" in bot.out[-1][1]["text"]
+    bot.on_text("111", "profit")
+    assert "TCS" in bot.out[-1][1]["text"] and "simple profit" in bot.out[-1][1]["text"]
+    bot.on_text("111", "sold 10 shares of TCS")
     bot.on_text("111", "sold 4 shares of TCS")
     assert "sold 4" in bot.out[-1][1]["text"]
     bot.on_text("111", "sold 50 TCS")

@@ -58,6 +58,17 @@ BOUGHT_RX = [
 ]
 
 
+PRICE_RX = re.compile(r"\s+(?:at|@|for)\s*(?:rs\.?|₹)?\s*(?P<px>[\d,]+(?:\.\d+)?)\s*(?:each|per share|rs|rupees)?\s*[.!]*$", re.I)
+
+
+def split_price(text: str) -> tuple[str, float | None]:
+    """'bought 10 TCS at 3100' -> ('bought 10 TCS', 3100.0)."""
+    m = PRICE_RX.search(text)
+    if not m:
+        return text, None
+    return text[:m.start()], float(m["px"].replace(",", ""))
+
+
 def parse_bought(text: str) -> tuple[int, str]:
     """Shares bought (positive) or sold (negative), and the company name."""
     t = re.sub(r"\s+", " ", text.strip())
@@ -118,6 +129,7 @@ class Bot:
 
     def _bought(self, chat, text) -> str | None:
         """Understand 'I bought 10 shares of TCS' / 'bought TCS 10 shares'. None if it isn't that."""
+        text, paid = split_price(text)
         q, name = parse_bought(text)
         if not q:
             return None
@@ -148,16 +160,51 @@ class Bot:
                 return f"I only have {have} shares of {label} saved for you, so I didn't record selling {-q}. Send holdings to check."
         row = {"symbol": sym, "name": label, "units": q, "asset_class": "india_equity" if sym.endswith(".NS") else "us_equity",
                "note": "telegram"}
+        if paid:                       # what he actually paid (or got) per share
+            px = paid
         if px:
             row.update(price=round(px, 2), amount=round(px * q))
         else:
             row.update(amount="")
         add(pname, [row])
         cur = r.get("currency", "INR")
-        about = f" (about {friendly.money(px * abs(q), cur)} at today's price)" if px and friendly.show_amounts() else ""
+        about = (f" at {friendly.money(paid, cur)} each" if paid else
+                 f" (about {friendly.money(px * abs(q), cur)} at today's price; add 'at <price>' next time "
+                 f"so I know what you paid)" if px and friendly.show_amounts() else "")
         if q < 0:
             return f"✅ Saved: you sold {-q} shares of {label}{about}."
         return f"✅ Saved: you bought {q} shares of {label}{about}. I'll keep an eye on it for you."
+
+    def _profit(self) -> str:
+        """Asked-for only (never in the daily push): invested vs worth now."""
+        from .analysis.portfolio import profit
+        from .config import profile_path
+        from .data import snapshot as sm
+        from .ledger import load
+        p = self._profile()
+        if not p:
+            return "Nothing saved yet. Send /setup to start."
+        lp = sm.latest()
+        pr = profit(p, sm.load(lp) if lp else {}, load(profile_path(self.profile_name).stem))
+        cur = p.get("base_currency", "INR")
+        m = lambda x: friendly.money(round(x), cur)
+        sign = lambda x: ("+" if x >= 0 else "−") + m(abs(x))
+        L = []
+        if pr["invested"]:
+            L += [f"You put in: {m(pr['invested'])}", f"Worth now: {m(pr['now'])}",
+                  f"{'Profit' if pr['gain'] >= 0 else 'Loss'}: {sign(pr['gain'])} ({pr['gain_pct']:+.1f}%)", ""]
+        for r in pr["rows"]:
+            if r.get("gain") is not None:
+                L.append(f"• {r['name']}: {sign(r['gain'])} ({r['gain_pct']:+.0f}%)"
+                         + (" (fund value from your setup)" if r.get("as_of_setup") else ""))
+        if pr["missing"]:
+            L += ["", "I don't know what you paid for: " + ", ".join(pr["missing"]) + ".",
+                  "Send /setup again with prices to fill this in."]
+        if pr["invested"] and pr["gain"] > 0:
+            L += ["", "Tax note: on shares and equity funds held over 1 year, profit above ₹1.25 lakh a year is "
+                      "taxed at 12.5%. Under 1 year it is 20%. You pay only when you sell."]
+        L += ["", "This is simple profit (worth now minus money put in), not a yearly return."]
+        return "\n".join(L) if L else "I don't have prices yet."
 
     def _holdings(self) -> str:
         """What is saved, in plain words, so the person can check it."""
@@ -249,6 +296,8 @@ class Bot:
             return self._month(chat)
         if low.startswith("done "):
             return self._done(chat, low[5:].strip())
+        if low in ("profit", "/profit", "profit loss", "p&l", "returns", "gain", "how much profit"):
+            return self._send(chat, {"text": self._profit(), "buttons": []})
         if low in ("holdings", "my holdings", "portfolio", "/holdings"):
             return self._send(chat, {"text": self._holdings(), "buttons": []})
         if low.startswith(("remove ", "delete ")):

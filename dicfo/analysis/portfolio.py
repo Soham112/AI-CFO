@@ -43,6 +43,8 @@ def current_mix(profile: dict, ledger: list[dict] | None = None, snap: dict | No
 def owned_stocks(profile: dict, ledger: list[dict] | None = None) -> list[dict]:
     """Shares from the profile plus share purchases recorded later (e.g. 'bought 10 shares of TCS')."""
     own = [dict(s) for s in (profile.get("holdings") or {}).get("stocks", []) or []]
+    for s in own:
+        s["cost"] = s["shares"] * s["avg_price"] if s.get("avg_price") and s.get("shares") else None
     by = {s.get("symbol"): s for s in own if s.get("symbol")}
     for r in ledger or []:
         try:
@@ -52,12 +54,24 @@ def owned_stocks(profile: dict, ledger: list[dict] | None = None) -> list[dict]:
         sym = r.get("symbol")
         if not units or not sym or r.get("asset_class") not in ("india_equity", "us_equity"):
             continue
-        if sym in by:
-            by[sym]["shares"] = (by[sym].get("shares") or 0) + units
-        else:
-            by[sym] = {"name": r.get("name") or sym, "symbol": sym, "shares": units}
+        try:
+            price = float(r.get("price") or 0)
+        except ValueError:
+            price = 0
+        if sym not in by:
+            by[sym] = {"name": r.get("name") or sym, "symbol": sym, "shares": 0, "cost": 0}
             own.append(by[sym])
+        s = by[sym]
+        have = s.get("shares") or 0
+        if units < 0 and s.get("cost") is not None and have:     # selling: cost goes down at the average price
+            s["cost"] -= s["cost"] / have * min(-units, have)
+        elif units > 0:
+            s["cost"] = (s["cost"] + units * price) if (s.get("cost") is not None and price) else None
+        s["shares"] = have + units
     own = [s for s in own if (s.get("shares") or 0) > 0]      # fully sold shares drop off
+    for s in own:
+        if s.get("cost") is not None:
+            s["avg_price"] = round(s["cost"] / s["shares"], 2)
     for s in own:
         if isinstance(s.get("shares"), float) and s["shares"].is_integer():
             s["shares"] = int(s["shares"])
@@ -177,3 +191,24 @@ def review(profile: dict, snap: dict, tactical: dict, ledger: list[dict] | None 
             add("medium", f"{h_['name']}: weaker company, price still falling", "Stop adding to it and review whether to keep it.")
     return {"current_mix": mix, "total_value": total, "gaps": gaps, "sip_total": sip_total, "issues": issues,
             "holdings_check": held}
+
+
+def profit(profile: dict, snap: dict, ledger: list[dict] | None = None) -> dict:
+    """Money put in vs worth now, per share and fund. Simple gain (not yearly return)."""
+    rows = []
+    for st in owned_stocks(profile, ledger):
+        now = stock_value(dict(st, value=None), snap)
+        rows.append({"name": st["name"], "kind": "share", "invested": st.get("cost"), "now": now})
+    for f in (profile.get("holdings") or {}).get("mutual_funds", []) or []:
+        rows.append({"name": f["name"], "kind": "fund", "invested": f.get("invested"), "now": f.get("value"),
+                     "as_of_setup": True})
+    for r in rows:
+        if r["invested"] and r["now"]:
+            r["gain"] = r["now"] - r["invested"]
+            r["gain_pct"] = r["gain"] / r["invested"] * 100
+    known = [r for r in rows if r.get("gain") is not None]
+    inv = sum(r["invested"] for r in known)
+    now = sum(r["now"] for r in known)
+    return {"rows": rows, "invested": inv, "now": now, "gain": now - inv,
+            "gain_pct": (now - inv) / inv * 100 if inv else None,
+            "missing": [r["name"] for r in rows if r.get("gain") is None]}
