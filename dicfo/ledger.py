@@ -48,6 +48,17 @@ def validate_row(r: dict, planned: float | None = None, confirm=input) -> bool:
     return True
 
 
+def clear(profile_name: str) -> bool:
+    """Delete the purchase record (used when the person redoes setup with their full, current holdings)."""
+    from .security import shred
+    gone = False
+    for f in (path(profile_name), path(profile_name).with_name(path(profile_name).name + ".enc")):
+        if f.exists():
+            shred(f)
+            gone = True
+    return gone
+
+
 def add(profile_name: str, rows: list[dict]):
     from .security import assert_clean
     rows = [dict(r) for r in rows]

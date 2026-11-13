@@ -57,6 +57,7 @@ def owned_stocks(profile: dict, ledger: list[dict] | None = None) -> list[dict]:
         else:
             by[sym] = {"name": r.get("name") or sym, "symbol": sym, "shares": units}
             own.append(by[sym])
+    own = [s for s in own if (s.get("shares") or 0) > 0]      # fully sold shares drop off
     for s in own:
         if isinstance(s.get("shares"), float) and s["shares"].is_integer():
             s["shares"] = int(s["shares"])

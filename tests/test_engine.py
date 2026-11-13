@@ -351,6 +351,12 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     assert any(h["symbol"] == "TCS.NS" and h["shares"] == 10 for h in r["portfolio_review"]["holdings_check"])
     bot.on_text("111", "invested 20000 in Infosys")
     assert "Saved" in bot.out[-1][1]["text"] and ledger.load("t")[-1]["symbol"] == "INFY.NS"
+    bot.on_text("111", "sold 4 shares of TCS")
+    assert "sold 4" in bot.out[-1][1]["text"]
+    bot.on_text("111", "sold 50 TCS")
+    assert "didn't record" in bot.out[-1][1]["text"]
+    r = run(snap, cfg.load_profile("t"), ledger.load("t"))
+    assert any(h["symbol"] == "TCS.NS" and h["shares"] == 6 for h in r["portfolio_review"]["holdings_check"])
     n = len(ledger.load("t"))
     bot.on_text("111", "bought 10 shares of TSC")             # typo: must not be saved
     assert "didn't save" in bot.out[-1][1]["text"] and "TCS" in bot.out[-1][1]["text"]
@@ -361,5 +367,13 @@ def test_bot_understands_bought_shares(monkeypatch, tmp_path):
     save("t", p)
     bot.on_text("111", "remove Hadf bank")
     assert "Removed" in bot.out[-1][1]["text"] and cfg.load_profile("t")["holdings"]["stocks"] == []
+    bot.on_text("111", "holdings")
+    assert "Shares:" in bot.out[-1][1]["text"] and "TCS" in bot.out[-1][1]["text"]
+    bot.on_text("111", "remove Parag Parikh Flexi Cap Fund - Direct Growth")
+    assert "funds" in bot.out[-1][1]["text"]
+    bot.on_text("111", "/setup")
+    assert "replaces everything" in bot.out[-2][1]["text"]
+    bot.on_text("111", "cancel")
+    assert "Nothing was changed" in bot.out[-1][1]["text"] and ledger.load("t")
     bot.on_text("111", "I bought something nice")
     assert "bought 10 shares of TCS" in bot.out[-1][1]["text"]

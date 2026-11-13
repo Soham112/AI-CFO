@@ -51,15 +51,17 @@ def to_message(update: dict) -> dict | None:
 
 
 BOUGHT_RX = [
-    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?:shares?|stocks?)\s+(?:of\s+|in\s+)?(?P<n>.+?)(?:\s+(?:shares?|stocks?))?\s*[.!]*$", re.I),
-    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?P<n>.+?)\s+(?:shares?|stocks?)\s*[.!]*$", re.I),
-    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<n>.+?)\s+(?P<q>[\d,]+)\s*(?:shares?|stocks?)?\s*[.!]*$", re.I),
-    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added)\s+(?P<q>[\d,]+)\s+(?P<n>[a-z&].*?)\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added|sold|sell)\s+(?P<q>[\d,]+)\s+(?:shares?|stocks?)\s+(?:of\s+|in\s+)?(?P<n>.+?)(?:\s+(?:shares?|stocks?))?\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added|sold|sell)\s+(?P<q>[\d,]+)\s+(?P<n>.+?)\s+(?:shares?|stocks?)\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added|sold|sell)\s+(?P<n>.+?)\s+(?P<q>[\d,]+)\s*(?:shares?|stocks?)?\s*[.!]*$", re.I),
+    re.compile(r"^(?:i\s+)?(?:have\s+|just\s+)?(?:bought|purchased|buy|added|sold|sell)\s+(?P<q>[\d,]+)\s+(?P<n>[a-z&].*?)\s*[.!]*$", re.I),
 ]
 
 
 def parse_bought(text: str) -> tuple[int, str]:
+    """Shares bought (positive) or sold (negative), and the company name."""
     t = re.sub(r"\s+", " ", text.strip())
+    sign = -1 if re.search(r"\b(sold|sell)\b", t, re.I) else 1
     for rx in BOUGHT_RX:
         m = rx.match(t)
         if m:
@@ -67,7 +69,7 @@ def parse_bought(text: str) -> tuple[int, str]:
             n = re.sub(r"\b(shares?|stocks?|of|the)\b", " ", m["n"], flags=re.I)
             n = re.sub(r"\s+", " ", n).strip(" .")
             if 0 < q < 10_000_000 and n:
-                return q, n
+                return sign * q, n
     return 0, ""
 
 
@@ -137,6 +139,13 @@ class Bot:
             lp = sm.latest()
             px = ((sm.load(lp).get("markets", {}).get(sym) or {}).get("price")) if lp else None
         label = sym.removesuffix(".NS")
+        if q < 0:
+            from .analysis.portfolio import owned_stocks
+            from .ledger import load
+            have = next((x.get("shares") or 0 for x in owned_stocks(self._profile() or {}, load(pname))
+                         if x.get("symbol") == sym), 0)
+            if -q > have:
+                return f"I only have {have} shares of {label} saved for you, so I didn't record selling {-q}. Send holdings to check."
         row = {"symbol": sym, "name": label, "units": q, "asset_class": "india_equity" if sym.endswith(".NS") else "us_equity",
                "note": "telegram"}
         if px:
@@ -145,23 +154,57 @@ class Bot:
             row.update(amount="")
         add(pname, [row])
         cur = r.get("currency", "INR")
-        about = f" (about {friendly.money(px * q, cur)} at today's price)" if px and friendly.show_amounts() else ""
+        about = f" (about {friendly.money(px * abs(q), cur)} at today's price)" if px and friendly.show_amounts() else ""
+        if q < 0:
+            return f"✅ Saved: you sold {-q} shares of {label}{about}."
         return f"✅ Saved: you bought {q} shares of {label}{about}. I'll keep an eye on it for you."
 
+    def _holdings(self) -> str:
+        """What is saved, in plain words, so the person can check it."""
+        from .analysis.portfolio import owned_stocks
+        from .ledger import load
+        from .config import profile_path
+        p = self._profile()
+        if not p:
+            return "Nothing saved yet. Send /setup to start."
+        cur = p.get("base_currency", "INR")
+        show = friendly.show_amounts()
+        h = p.get("holdings") or {}
+        L = ["Here's what I have saved for you:", "", "Mutual funds:"]
+        L += [f"• {f['name']}" + (f": {friendly.money(f.get('value', 0), cur)}" if show else "")
+              + (f", SIP {friendly.money(f['sip_monthly'], cur)}" if f.get("sip_monthly") and show else "")
+              for f in h.get("mutual_funds", []) or []] or ["• none"]
+        L += ["", "Shares:"]
+        L += [f"• {s['name']}: {s.get('shares')} shares" for s in owned_stocks(p, load(profile_path(self.profile_name).stem))] or ["• none"]
+        o = h.get("other") or {}
+        if show:
+            L += ["", f"FD / PPF / EPF: {friendly.money(o.get('india_fixed_income', 0), cur)}",
+                  f"Gold: {friendly.money(o.get('gold', 0), cur)}"]
+        L += ["", "To fix one share or fund: remove <name>.",
+              "To enter everything again from the start: /setup"]
+        return "\n".join(L)
+
     def _remove(self, name: str) -> str:
-        """Take a wrongly typed share off the person's list (only from their own holdings, by exact name)."""
+        """Take a wrongly typed share or fund off the person's list (by exact name, own holdings only)."""
         from .chat_onboard import save
         p = self._profile()
         if not p:
             return "There's nothing to remove yet."
-        st = (p.get("holdings") or {}).get("stocks", []) or []
-        keep = [x for x in st if str(x.get("name", "")).strip().lower() != name.lower()]
-        if len(keep) == len(st):
-            names = ", ".join(str(x.get("name")) for x in st) or "none"
-            return f"I couldn't find '{name}' in your shares. Your shares are: {names}"
-        p["holdings"]["stocks"] = keep
+        h = p.setdefault("holdings", {})
+        hit = ""
+        for key, label in (("stocks", "shares"), ("mutual_funds", "funds")):
+            items = h.get(key, []) or []
+            keep = [x for x in items if str(x.get("name", "")).strip().lower() != name.lower()]
+            if len(keep) != len(items):
+                h[key], hit = keep, label
+                if key == "mutual_funds":      # its monthly SIP goes too
+                    p.setdefault("plan", {})["core"] = [c for c in (p["plan"].get("core") or [])
+                                                        if str(c.get("name", "")).strip().lower() != name.lower()]
+                break
+        if not hit:
+            return f"I couldn't find '{name}'. Send holdings to see the exact names."
         save(self.profile_name, p)
-        return f"✅ Removed '{name}' from your shares."
+        return f"✅ Removed '{name}' from your {hit}."
 
     def _invested_stock(self, name: str, amount: float) -> str | None:
         from . import config
@@ -206,6 +249,8 @@ class Bot:
             return self._month(chat)
         if low.startswith("done "):
             return self._done(chat, low[5:].strip())
+        if low in ("holdings", "my holdings", "portfolio", "/holdings"):
+            return self._send(chat, {"text": self._holdings(), "buttons": []})
         if low.startswith(("remove ", "delete ")):
             return self._send(chat, {"text": self._remove(text.split(None, 1)[1].strip()), "buttons": []})
         try:
@@ -287,12 +332,18 @@ class Bot:
     def _start_onboarding(self, chat):
         from .chat_onboard import Onboarding
         self.onboarding[chat] = Onboarding()
-        self._send(chat, {"text": "Let's set up your Personal CFO. It takes about 2 minutes. 🙂\n"
-                                  "Never send PAN, Aadhaar, account numbers or passwords.", "buttons": []})
+        again = self._profile() is not None
+        self._send(chat, {"text": ("Let's set up your Personal CFO. It takes about 5 minutes. 🙂\n"
+                                   + ("This replaces everything you entered before (funds, shares and purchases). "
+                                      "Send cancel to stop and keep the old details.\n" if again else "")
+                                   + "Never send PAN, Aadhaar, account numbers or passwords."), "buttons": []})
         self._send(chat, self.onboarding[chat].current())
 
     def _onboard_answer(self, chat, value, from_button=None):
         ob = self.onboarding[chat]
+        if str(value).strip().lower() in ("cancel", "/cancel", "stop"):
+            del self.onboarding[chat]
+            return self._send(chat, {"text": "Stopped. Nothing was changed.", "buttons": []}) or ""
         if from_button is not None and from_button != ob.i:
             return ""                                  # stale button from an earlier question
         err = ob.answer(value)
@@ -303,8 +354,11 @@ class Bot:
             from .chat_onboard import save
             from .config import profile_path
             try:
-                save(profile_path(self.profile_name).stem, ob.profile())
-                done = ("All set ✅ I'll message you when there's something to do. Tap below any time.")
+                from .ledger import clear
+                name = profile_path(self.profile_name).stem
+                save(name, ob.profile())
+                clear(name)          # the new answers are the full picture; old test purchases would double count
+                done = "All set ✅ I'll send you a message every morning."
             except Exception as e:
                 done = f"I couldn't save that ({e}). Please ask Soh to check the laptop."
             del self.onboarding[chat]
