@@ -25,6 +25,10 @@ def image_text(data: bytes) -> list[str]:
     req = Vision.VNRecognizeTextRequest.alloc().init()
     req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
     req.setUsesLanguageCorrection_(False)
+    try:
+        req.setRecognitionLanguages_(["en-IN", "en-US"])
+    except Exception:
+        pass
     handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(NSData.dataWithBytes_length_(data, len(data)), None)
     ok, err = handler.performRequests_error_([req], None)
     if not ok:
@@ -49,10 +53,32 @@ def _amount(s: str) -> float | None:
     return best
 
 
+TOKEN = re.compile(r"(?:(?<=\s)|^)(?P<pre>[^\d\s,.+\-%()]?)(?P<num>\d[\d,]*(?:\.\d+)?)")
+
+
+def fix_rupee(lines: list[str]) -> list[str]:
+    """OCR often reads the ₹ sign as '7', 'Z', 'R' or '·'. If this screen writes ₹ before its amounts,
+    a leading 7 on an amount with no other sign in front is really the ₹ sign: drop it."""
+    toks = [m for ln in lines for m in TOKEN.finditer(ln) if "," in m["num"]]
+    if not toks:
+        return lines
+    marked = [m for m in toks if m["pre"]]
+    sevens = [m for m in toks if not m["pre"] and m["num"].startswith("7")]
+    if not marked or (len(marked) + len(sevens)) / len(toks) < 0.6:
+        return lines
+
+    def strip7(m):
+        n = m["num"]
+        if not m["pre"] and n.startswith("7") and len(n.replace(",", "")) > 3:
+            return n[1:].lstrip(",")
+        return m["pre"] + n if m["pre"] else n
+    return [TOKEN.sub(strip7, ln) for ln in lines]
+
+
 def parse_funds(lines: list[str]) -> list[dict]:
     """Group recognised lines into funds: a name line, then labelled amounts (current / invested)."""
     funds, cur, want = [], None, None
-    for raw in lines:
+    for raw in fix_rupee(lines):
         s = raw.strip()
         if not s:
             continue

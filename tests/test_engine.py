@@ -500,3 +500,14 @@ def test_fund_screenshot(monkeypatch, tmp_path):
     funds = cfg.load_profile("t")["holdings"]["mutual_funds"]
     assert len(funds) == 3 and funds[0]["invested"] == 380000
     assert any(f["name"].startswith("UTI Nifty") and f["sip_monthly"] == 10000 for f in funds)   # SIP kept
+
+
+def test_ocr_rupee_misread_as_7():
+    from dicfo.ocr import parse_funds
+    lines = ["Parag Parikh Flexi Cap Fund", "Current 75,12,340", "Invested ·3,80,000",
+             "Mirae Asset Large Cap Fund", "Current Z2,45,100", "Invested R2,00,000",
+             "HDFC Mid Cap Opportunities Fund", "Current 71,18,750", "Invested 795,000"]
+    got = [(f["value"], f["invested"]) for f in parse_funds(lines)]
+    assert got == [(512340, 380000), (245100, 200000), (118750, 95000)]
+    clean = ["Axis Bluechip Fund", "Current ₹7,50,000", "Invested ₹6,00,000"]       # a real 7 stays
+    assert parse_funds(clean)[0]["value"] == 750000

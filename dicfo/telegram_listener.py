@@ -261,7 +261,8 @@ class Bot:
                   + ". I'll keep them at the value in your file."]
         which = " and ".join(w for w, rows in (("shares", parts["stocks"]), ("funds", parts["funds"])) if rows)
         if more:
-            L += ["", "Please check each number against your app; pictures can be misread.",
+            L += ["", "⚠️ Please check every number against your app. I read them from a picture and may have misread one. "
+                      "If one is wrong, reply no and type that fund instead, like: HDFC Mid Cap 118750 invested 95000",
                   "More funds? Send the next screenshot now."]
         L += ["", f"Reply yes to save. This replaces the {which} I had before. Reply no to cancel."]
         self._send(chat, {"text": "\n".join(L), "buttons": []})
