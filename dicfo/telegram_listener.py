@@ -62,6 +62,18 @@ BOUGHT_RX = [
 PRICE_RX = re.compile(r"\s+(?:at|@|for)\s*(?:rs\.?|₹)?\s*(?P<px>[\d,]+(?:\.\d+)?)\s*(?:each|per share|rs|rupees)?\s*[.!]*$", re.I)
 
 
+_GENERIC = {"fund", "direct", "regular", "plan", "growth", "option", "the", "of", "-", "idcw", "mutual"}
+
+
+def same_fund(a: str, b: str) -> bool:
+    """'UTI Nifty 50 Index Fund - Direct Growth' == 'UTI Nifty 50 Index Fund - Direct Plan'."""
+    ta = set(re.findall(r"[a-z0-9]+", a.lower())) - _GENERIC
+    tb = set(re.findall(r"[a-z0-9]+", b.lower())) - _GENERIC
+    if not ta or not tb:
+        return False
+    return len(ta & tb) / min(len(ta), len(tb)) >= 0.75
+
+
 def split_price(text: str) -> tuple[str, float | None]:
     """'bought 10 TCS at 3100' -> ('bought 10 TCS', 3100.0)."""
     m = PRICE_RX.search(text)
@@ -93,6 +105,7 @@ class Bot:
         self.onboarding: dict = {}                    # chat -> Onboarding
         self.out: list[tuple[str, dict]] = []         # (chat, card) when no token (tests)
         self.pending_import: dict = {}                # chat -> parts waiting for "yes"
+        self.editing: dict = {}                       # chat -> EditOne
 
     # ---------- helpers ----------
     def _send(self, chat, card):
@@ -198,6 +211,34 @@ class Bot:
             return self._send(chat, {"text": "That file seems to contain an ID or account number in a name column, "
                                               "so I didn't read it.", "buttons": []})
         self.pending_import[chat] = parts
+        self._preview(chat, parts)
+
+    def on_image(self, chat: str, data: bytes):
+        """A screenshot of the fund app: read it on this Mac, add to what's waiting, confirm before saving."""
+        if chat not in self.allowed:
+            return
+        from .chat_onboard import _guess_category
+        from .ocr import image_text, parse_funds
+        if self._profile() is None:
+            return self._send(chat, {"text": "Please finish /setup first, then send the screenshot again.", "buttons": []})
+        try:
+            found = parse_funds(image_text(data))
+        except ValueError as e:
+            return self._send(chat, {"text": str(e), "buttons": []})
+        if not found:
+            return self._send(chat, {"text": "I couldn't find any funds in that picture. Please send a screenshot of the "
+                                              "screen that lists each fund with its current and invested value.",
+                                     "buttons": []})
+        parts = self.pending_import.get(chat) or {"stocks": [], "funds": [], "unmatched": [], "from_images": True}
+        have = {f["name"].lower() for f in parts["funds"]}
+        for f in found:                       # overlapping screenshots: don't add the same fund twice
+            if f["name"].lower() not in have:
+                parts["funds"].append(dict(f, sip_monthly=0, category=_guess_category(f["name"]),
+                                           plan="regular" if "regular" in f["name"].lower() else "direct"))
+        self.pending_import[chat] = parts
+        self._preview(chat, parts, more=True)
+
+    def _preview(self, chat, parts, more=False):
         cur = (self._profile() or {}).get("base_currency", "INR")
         m = lambda x: friendly.money(round(x), cur)
         L = ["I read your file. Please check:"]
@@ -219,6 +260,9 @@ class Bot:
             L += ["", "I don't have daily prices for: " + ", ".join(parts["unmatched"][:10])
                   + ". I'll keep them at the value in your file."]
         which = " and ".join(w for w, rows in (("shares", parts["stocks"]), ("funds", parts["funds"])) if rows)
+        if more:
+            L += ["", "Please check each number against your app; pictures can be misread.",
+                  "More funds? Send the next screenshot now."]
         L += ["", f"Reply yes to save. This replaces the {which} I had before. Reply no to cancel."]
         self._send(chat, {"text": "\n".join(L), "buttons": []})
 
@@ -236,7 +280,7 @@ class Bot:
         if parts["funds"]:
             old = {str(f.get("name", "")).lower(): f for f in h.get("mutual_funds", []) or []}
             for f in parts["funds"]:          # keep the SIP amount he already told us
-                prev = next((o for k, o in old.items() if k and (k in f["name"].lower() or f["name"].lower() in k)), None)
+                prev = next((o for k, o in old.items() if k and same_fund(k, f["name"])), None)
                 if prev:
                     f["sip_monthly"] = prev.get("sip_monthly", 0)
                     if prev.get("scheme_code"):
@@ -312,6 +356,46 @@ class Bot:
               "To enter everything again from the start: /setup"]
         return "\n".join(L)
 
+    def _details(self) -> str:
+        from .chat_onboard import EDITABLE, LABELS, get_answer, show_answer
+        p = self._profile()
+        if not p:
+            return "Nothing saved yet. Send /setup to start."
+        cur = p.get("base_currency", "INR")
+        L = ["Your details:"]
+        for n, k in enumerate(EDITABLE, 1):
+            L.append(f"{n}. {LABELS[k]}: {show_answer(k, get_answer(p, k), lambda x: friendly.money(x, cur))}")
+        L += ["", "To change one, send change and its number, like: change 5",
+              "Funds and shares: send holdings to see them."]
+        return "\n".join(L)
+
+    def _start_edit(self, chat, n: int):
+        from .chat_onboard import EDITABLE, EditOne
+        if not self._profile():
+            return self._send(chat, {"text": "Nothing saved yet. Send /setup to start.", "buttons": []})
+        if not 1 <= n <= len(EDITABLE):
+            return self._send(chat, {"text": f"Please pick a number from 1 to {len(EDITABLE)}. Send details to see the list.",
+                                     "buttons": []})
+        self.editing[chat] = EditOne(EDITABLE[n - 1])
+        self._send(chat, self.editing[chat].current())
+
+    def _edit_answer(self, chat, text):
+        from .chat_onboard import LABELS, save, set_answer, show_answer
+        from .config import profile_path
+        ed = self.editing[chat]
+        if text.strip().lower() in ("cancel", "/cancel", "stop"):
+            del self.editing[chat]
+            return self._send(chat, {"text": "OK, nothing changed.", "buttons": []})
+        err = ed.answer(text)
+        if err:
+            return self._send(chat, {"text": err, "buttons": []})
+        del self.editing[chat]
+        p = set_answer(self._profile(), ed.key, ed.value())
+        save(profile_path(self.profile_name).stem, p)
+        cur = p.get("base_currency", "INR")
+        self._send(chat, {"text": f"✅ Changed. {LABELS[ed.key]}: {show_answer(ed.key, ed.value(), lambda x: friendly.money(x, cur))}\n"
+                                  "Send details to see everything, or change <number> to fix another.", "buttons": []})
+
     def _add_fund(self, text: str) -> str:
         """'Parag Parikh Flexi Cap 500000 invested 380000 SIP 10000' outside /setup: add or update that fund."""
         from .chat_onboard import FUND_RX, _guess_category, save
@@ -385,6 +469,8 @@ class Bot:
         low = text.strip().lower()
         if chat in self.onboarding:
             return self._onboard_answer(chat, text)
+        if chat in self.editing:
+            return self._edit_answer(chat, text)
         if chat in self.pending_import:
             parts = self.pending_import.pop(chat)
             if low in ("yes", "y", "ok", "save", "haan", "ha"):
@@ -410,6 +496,11 @@ class Bot:
             return self._done(chat, low[5:].strip())
         if low in ("profit", "/profit", "profit loss", "p&l", "returns", "gain", "how much profit"):
             return self._send(chat, {"text": self._profit(), "buttons": []})
+        if low in ("details", "my details", "change", "/change", "edit", "change details", "/details"):
+            return self._send(chat, {"text": self._details(), "buttons": []})
+        mch = re.fullmatch(r"(?:change|edit)\s+(\d{1,2})", low)
+        if mch:
+            return self._start_edit(chat, int(mch.group(1)))
         if low in ("holdings", "my holdings", "portfolio", "/holdings"):
             return self._send(chat, {"text": self._holdings(), "buttons": []})
         if re.search(r"\s(invested|sip)\s+[\d,]+", low) and not low.startswith(("invested", "bought", "sold")):
@@ -575,6 +666,13 @@ def listen(profile: str | None, once: bool = False):
                                   reply_markup=json.dumps({"inline_keyboard": []}))
                         continue
                     msg = u.get("message") or {}
+                    if msg.get("photo") and msg.get("date", 0) >= started - 60:
+                        chat = str(msg["chat"]["id"])
+                        if chat in bot.allowed:
+                            ph = max(msg["photo"], key=lambda x: x.get("file_size") or 0)
+                            fp = _call(tok, "getFile", file_id=ph["file_id"])["result"]["file_path"]
+                            bot.on_image(chat, requests.get(f"https://api.telegram.org/file/bot{tok}/{fp}", timeout=60).content)
+                        continue
                     if msg.get("document") and msg.get("date", 0) >= started - 60:
                         chat, d = str(msg["chat"]["id"]), msg["document"]
                         if chat in bot.allowed:
@@ -583,7 +681,10 @@ def listen(profile: str | None, once: bool = False):
                                 continue
                             fp = _call(tok, "getFile", file_id=d["file_id"])["result"]["file_path"]
                             data = requests.get(f"https://api.telegram.org/file/bot{tok}/{fp}", timeout=60).content
-                            bot.on_document(chat, d.get("file_name") or fp, data)   # read in memory, never written to disk
+                            if (d.get("mime_type") or "").startswith("image/"):
+                                bot.on_image(chat, data)
+                            else:
+                                bot.on_document(chat, d.get("file_name") or fp, data)   # read in memory, never written to disk
                         continue
                     m = to_message(u)
                     if not m or m["date"] < started - 60:

@@ -166,3 +166,55 @@ def save(profile_name: str, p: dict):
     validate_profile(p)
     write_private(PROFILES / f"{profile_name}.yaml", yaml.safe_dump(p, sort_keys=False, allow_unicode=True).encode())
     harden()
+
+
+# ---------- change one answer later ----------
+EDITABLE = ["name", "age", "employment", "monthly_income", "monthly_investable", "emergency_fund_have_months",
+            "horizon_years", "risk_tolerance", "tax_regime", "india_fixed_income", "gold", "invest_abroad"]
+LABELS = {"name": "Name", "age": "Age", "employment": "Work", "monthly_income": "Monthly income",
+          "monthly_investable": "Can invest each month", "emergency_fund_have_months": "Savings would last",
+          "horizon_years": "Need the money in", "risk_tolerance": "If market falls 30%",
+          "tax_regime": "Tax regime", "india_fixed_income": "EPF + PPF + FD total", "gold": "Gold (ETF/SGB/coins)",
+          "invest_abroad": "Invest outside India"}
+
+
+def get_answer(p: dict, key: str):
+    if key == "tax_regime":
+        return (p.get("tax") or {}).get("regime")
+    if key in ("india_fixed_income", "gold"):
+        return ((p.get("holdings") or {}).get("other") or {}).get(key)
+    return p.get(key)
+
+
+def show_answer(key: str, v, money=lambda x: f"{x:,}") -> str:
+    q = next(q for q in QUESTIONS if q[0] == key)
+    if q[2]:
+        return next((label for label, val in q[2] if val == v), str(v))
+    if q[3] == "money" and isinstance(v, (int, float)):
+        return money(v)
+    return "not given" if v in (None, "") else str(v)
+
+
+def set_answer(p: dict, key: str, v) -> dict:
+    if key == "tax_regime":
+        p.setdefault("tax", {})["regime"] = v
+    elif key in ("india_fixed_income", "gold"):
+        p.setdefault("holdings", {}).setdefault("other", {})[key] = v
+    else:
+        p[key] = v
+    return p
+
+
+class EditOne(Onboarding):
+    """Ask exactly one setup question again, with the same checks."""
+    def __init__(self, key: str):
+        super().__init__()
+        self.key, self.i = key, [q[0] for q in QUESTIONS].index(key)
+
+    def current(self) -> dict:
+        c = super().current()
+        c["text"] = c["text"].split(") ", 1)[1] + "\n(Send cancel to keep the old answer.)"
+        return c
+
+    def value(self):
+        return self.ans.get(self.key)

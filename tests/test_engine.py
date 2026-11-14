@@ -452,3 +452,51 @@ def test_setup_accepts_many_lines():
     ob.i = [q[0] for q in QUESTIONS].index("stocks")
     ob.answer("TCS 10 at 3100\nHDFC Bank 50 at 1450\nINFY 5")
     assert [s["symbol"] for s in ob.stocks] == ["TCS.NS", "HDFCBANK.NS", "INFY.NS"]
+
+
+def test_change_one_detail(monkeypatch, tmp_path):
+    from dicfo import config as cfg
+    from dicfo.telegram_listener import Bot
+    import dicfo.security as sec
+    monkeypatch.setattr(cfg, "PROFILES", tmp_path)
+    monkeypatch.delenv("DICFO_KEY", raising=False)
+    monkeypatch.setattr(sec, "get_key", lambda: None)
+    (tmp_path / "t.yaml").write_text((cfg.ROOT / "profiles" / "example-india-resident.yaml").read_text())
+    bot = Bot("t", {"111"})
+    bot.on_text("111", "details")
+    assert "2. Age" in bot.out[-1][1]["text"] and "change 5" in bot.out[-1][1]["text"]
+    bot.on_text("111", "change 2")
+    assert "How old" in bot.out[-1][1]["text"]
+    bot.on_text("111", "abc")
+    assert "number" in bot.out[-1][1]["text"]
+    bot.on_text("111", "61")
+    assert "Changed" in bot.out[-1][1]["text"] and cfg.load_profile("t")["age"] == 61
+    bot.on_text("111", "change 9")
+    bot.on_text("111", "2")
+    assert cfg.load_profile("t")["tax"]["regime"] == "old"
+    bot.on_text("111", "change 7")
+    bot.on_text("111", "cancel")
+    assert "nothing changed" in bot.out[-1][1]["text"]
+
+
+def test_fund_screenshot(monkeypatch, tmp_path):
+    from dicfo import config as cfg, ocr
+    from dicfo.telegram_listener import Bot
+    import dicfo.security as sec
+    lines = ["Parag Parikh Flexi Cap Fund", "Direct Growth", "Current ₹5,02,340", "Invested ₹3,80,000", "Returns +32.2%",
+             "UTI Nifty 50 Index Fund - Direct Plan", "Current value", "3,10,500", "Invested", "2,50,000", "XIRR 14.2%"]
+    assert ocr.parse_funds(lines)[1] == {"name": "UTI Nifty 50 Index Fund - Direct Plan", "value": 310500, "invested": 250000}
+    monkeypatch.setattr(cfg, "PROFILES", tmp_path)
+    monkeypatch.delenv("DICFO_KEY", raising=False)
+    monkeypatch.setattr(sec, "get_key", lambda: None)
+    (tmp_path / "t.yaml").write_text((cfg.ROOT / "profiles" / "example-india-resident.yaml").read_text())
+    shots = iter([lines[:5], lines[5:] + ["HDFC Mid Cap Opportunities Fund", "Current 2,10,000", "Invested 1,60,000"]])
+    monkeypatch.setattr(ocr, "image_text", lambda data: next(shots))
+    bot = Bot("t", {"111"})
+    bot.on_image("111", b"img1")
+    bot.on_image("111", b"img2")
+    assert "3 mutual funds" in bot.out[-1][1]["text"] and "next screenshot" in bot.out[-1][1]["text"]
+    bot.on_text("111", "yes")
+    funds = cfg.load_profile("t")["holdings"]["mutual_funds"]
+    assert len(funds) == 3 and funds[0]["invested"] == 380000
+    assert any(f["name"].startswith("UTI Nifty") and f["sip_monthly"] == 10000 for f in funds)   # SIP kept
